@@ -6,6 +6,7 @@ CREATE TABLE users (
   email VARCHAR(150) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   full_name VARCHAR(100) NOT NULL,
+  gender VARCHAR(20) NOT NULL,
   phone VARCHAR(15),
   verification_status verification_status DEFAULT 'Pending',
   role user_role DEFAULT 'student',
