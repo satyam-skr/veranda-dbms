@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 
 const signup = async(req,res) => {
     try{
-        const {email,password,full_name,phone,verification_status,role}=req.body;
+        const {email,password_hash,full_name,gender,phone,verification_status}=req.body;
         const existingUser = await findUserByEmail(email);
         if(existingUser){
             return res.status(400).json({error:'User already exits'});
@@ -24,11 +24,14 @@ const signup = async(req,res) => {
             assignedRole = "student";
         }
 
-        const hashedPassword = await bcrypt.hash(password,10);
+        const hashedPassword = await bcrypt.hash(password_hash,10);
 
-        const newUser = await registerUser(email,
+        const newUser = await registerUser(
+            email,
             hashedPassword,
             full_name,
+            gender,
+            phone,
             verification_status,
             assignedRole);
 
@@ -38,19 +41,19 @@ const signup = async(req,res) => {
         });
     }
     catch(err){
-        res.status(500).json({message:err.message});
+        res.status(500).json({err:err.message});
     }
 };
 
 const login = async(req,res)=>{
     try{
-        const {email,password} = req.body;
+        const {email,password_hash} = req.body;
         const user = await findUserByEmail(email);
         if(!user){
             return res.status(401).json({message:"already existed"});
         }
 
-        const matched = await bcrypt.compare(password,user.password);
+        const matched = await bcrypt.compare(password_hash,user.password_hash);
 
         if(!matched){
             return res.status(401).json({message:"password is not matched"});
@@ -61,6 +64,7 @@ const login = async(req,res)=>{
             process.env.JWT_SECRET,
             { expiresIn: "2h" }
         );
+
         res.json({
             message:"User login successfull",
             token,

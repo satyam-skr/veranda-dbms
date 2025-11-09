@@ -1,24 +1,32 @@
-CREATE TABLE complaints (
-  complaint_id SERIAL PRIMARY KEY,
-  student_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+CREATE TYPE complaint_category AS ENUM (
+  'Mess',
+  'Room',
+  'Floor',
+  'Internet',
+  'Cleaning'
+);
 
-  category VARCHAR(50) NOT NULL CHECK (
-    category IN ('Mess', 'Room', 'Floor', 'Internet', 'Cleaning')
-  ),
+CREATE TYPE complaint_status AS ENUM (
+  'Pending',
+  'In Progress',
+  'Resolved',
+  'Rejected'
+);
 
-  issue_title VARCHAR(150) NOT NULL,
+CREATE TABLE IF NOT EXISTS complaints (
+  complaint_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  student_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+
+  category complaint_category NOT NULL,
+
+  issue_title VARCHAR(255) NOT NULL,
   description TEXT NOT NULL,
   photo_url TEXT,
 
-  -- priority VARCHAR(10) DEFAULT 'Medium' CHECK (
-  --   priority IN ('Low', 'Medium', 'High', 'Critical')
-  -- ),
+  status complaint_status DEFAULT 'Pending',
 
-  status VARCHAR(20) DEFAULT 'Pending' CHECK (
-    status IN ('Pending', 'In Progress', 'Resolved', 'Rejected')
-  ),
-
-  assigned_to INT REFERENCES users(user_id) ON DELETE SET NULL,
+  assigned_to UUID REFERENCES users(user_id) ON DELETE SET NULL,
   admin_remarks TEXT,
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

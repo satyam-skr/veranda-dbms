@@ -2,8 +2,8 @@ import {createComplaint,getComplaintsByStudent,getAllComplaints} from '../models
 
 const submitComplaints = async(req,res) => {
     try{
-        const student_id = req.user.id;
-        const {category,issue_title,description,photo_url}=req.body;
+        // const student_id = req.user.id;
+        const {student_id,category,issue_title,description,photo_url}=req.body;
 
         const newComplaint = await createComplaint(
             student_id,

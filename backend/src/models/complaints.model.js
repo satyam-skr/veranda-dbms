@@ -15,13 +15,16 @@ const createComplaint = async(student_id,category,issue_title,description,photo_
 
 const getAllComplaints = async() => {
     const query = `
-        SELECT c.* 
-        FROM complaints 
+        SELECT 
+        c.*, 
+        u.full_name AS student_name,
+        u.email AS student_email
+        FROM complaints c
         JOIN users u ON c.student_id = u.user_id
-        ORDER BY c.created_at DESC
+        ORDER BY c.created_at DESC;
         `;
     const {rows} = await pool.query(query);
-    return rows[0];
+    return rows;
 }
 
 const getComplaintsByStudent = async(student_id) => {

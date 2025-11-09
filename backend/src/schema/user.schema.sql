@@ -1,15 +1,19 @@
-CREATE TYPE user_role AS ENUM ('superAdmin', 'mess', 'shop', 'transport', 'maintenance', 'student');
-CREATE TYPE verification_status AS ENUM ('Pending', 'Verified', 'Rejected');
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE users (
-  user_id SERIAL PRIMARY KEY,
-  email VARCHAR(150) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  full_name VARCHAR(100) NOT NULL,
-  gender VARCHAR(20) NOT NULL,
-  phone VARCHAR(15),
-  verification_status verification_status DEFAULT 'Pending',
-  role user_role DEFAULT 'student',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TYPE gender_enum AS ENUM ('male', 'female', 'unknown');
+
+CREATE TABLE 
+  IF NOT EXISTS
+  users (
+    user_id uuid PRIMARY KEY DEFAULT gen_random_uuid (),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name VARCHAR(255),
+    phone VARCHAR(50),
+    gender gender_enum,
+    verification_status VARCHAR(50) DEFAULT 'unverified',
+    is_active BOOLEAN DEFAULT TRUE,
+    user_role JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
