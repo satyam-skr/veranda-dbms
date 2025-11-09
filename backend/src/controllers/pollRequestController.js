@@ -43,3 +43,12 @@ export const approvePollRequest = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+export const pendingRequests = async (req, res) => {
+  try {
+    const rows = await getPendingRequests(); // from your model
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
