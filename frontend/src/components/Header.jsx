@@ -23,7 +23,9 @@ const Header = () => {
               Mess
             </Link>
             <span className="text-muted-foreground cursor-not-allowed">Transport</span>
-            <span className="text-muted-foreground cursor-not-allowed">Shop (Poll)</span>
+            <Link to="/shop/polls" className="text-foreground hover:text-primary transition-colors">
+              Shop (Polls)
+            </Link>
             <Link to="/mess" className="text-foreground hover:text-primary transition-colors">
               General Complaint
             </Link>

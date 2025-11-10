@@ -28,9 +28,9 @@ const Home = () => {
     },
     {
       title: 'Shop (Poll)',
-      description: 'Coming soon',
+      description: 'Poll for new shop items',
       icon: Store,
-      disabled: true,
+      link: '/shop/polls',
       color: 'text-muted-foreground'
     },
     {

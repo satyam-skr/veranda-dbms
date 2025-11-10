@@ -2,8 +2,13 @@
 import express from "express";
 import userRoute from "./routes/users.route.js";
 import pollRoutes from "./routes/pollRoutes.js";
-
+import cors from "cors";
 const app = express();
+app.use(cors({
+  origin: "*", // your frontend
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
