@@ -115,6 +115,20 @@ export const updateBus = async (id, { bus_number, route_name, start_point, end_p
   }
 };
 
+/* ---------------- AUTO MODELS ---------------- */
+
+
+
+export const updateBusStatus = async (bus_id, status) => {
+  const query = `
+    UPDATE transport_buses
+    SET status = $2, updated_at = NOW()
+    WHERE bus_id = $1
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [bus_id, status]);
+  return rows[0];
+};
 
 
 
