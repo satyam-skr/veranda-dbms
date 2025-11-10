@@ -6,13 +6,15 @@ import Home from '../pages/home/Home';
 import OlxList from '../pages/olx/OlxList';
 import Mess from '../pages/mess/Mess';
 import SuperAdmin from '../pages/admin/SuperAdmin';
+import TransportPage from "@/pages/transport/TransportPage";
 
 const Router = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      
+      <Route path="/transport" element={<TransportPage />} />
+
       <Route
         path="/"
         element={

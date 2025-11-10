@@ -71,3 +71,51 @@ export const resetBusArrival = async (bus_id) => {
   );
   return rows[0];
 };
+
+// ✅ Fetch a specific timetable by ID
+export const getTimetableById = async (id) => {
+  const result = await pool.query(
+    "SELECT * FROM transport_timetables WHERE timetable_id = $1",
+    [id]
+  );
+  return result.rows[0];
+};
+
+// ✅ Delete a timetable by ID
+export const deleteTimetable = async (id) => {
+  await pool.query(
+    "DELETE FROM transport_timetables WHERE timetable_id = $1",
+    [id]
+  );
+};
+
+// ✅ Add new bus
+
+
+// ✅ Update an existing bus
+export const updateBus = async (id, { bus_number, route_name, start_point, end_point, stops }) => {
+  try {
+    const query = `
+      UPDATE transport_buses
+      SET bus_number = $1,
+          route_name = $2,
+          start_point = $3,
+          end_point = $4,
+          stops = $5
+      WHERE bus_id = $6
+      RETURNING *;
+    `;
+    const values = [bus_number, route_name, start_point, end_point, stops, id];
+    const result = await pool.query(query, values);
+
+    return result.rows[0];
+  } catch (err) {
+    console.error("❌ Error updating bus in model:", err);
+    throw err;
+  }
+};
+
+
+
+
+

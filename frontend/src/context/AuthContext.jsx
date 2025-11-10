@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { findUserByEmail } from '../api/mockApi';
 
 const AuthContext = createContext(null);
@@ -6,6 +7,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate(); // ✅ For redirect after logout
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
@@ -25,9 +27,13 @@ export const AuthProvider = ({ children }) => {
     return { success: false, error: 'Invalid credentials' };
   };
 
+  // ✅ Enhanced logout with redirect
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+
+    // Redirect to login page
+    navigate('/login', { replace: true }); // ✅ Prevents going back to protected routes
   };
 
   const hasRole = (role) => {
@@ -44,7 +50,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     hasRole,
     isDomainAdmin,
-    loading
+    loading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

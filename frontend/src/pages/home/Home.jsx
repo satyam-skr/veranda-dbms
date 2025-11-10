@@ -21,10 +21,10 @@ const Home = () => {
     },
     {
       title: 'Transport',
-      description: 'Coming soon',
+      description: 'View bus schedules & updates',
       icon: Bus,
-      disabled: true,
-      color: 'text-muted-foreground'
+      link: '/transport',
+      color: 'text-accent'
     },
     {
       title: 'Shop (Poll)',
