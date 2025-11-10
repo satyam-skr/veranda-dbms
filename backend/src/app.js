@@ -1,6 +1,9 @@
 import express from "express";
 import userRoute from './routes/users.route.js'
-import userComplaints from './routes/complaints.route.js';
+import userComplaintsRoute from './routes/complaints.route.js';
+import foodItemsRoute from './routes/foodItems.route.js';
+import menuRoute from './routes/menu.route.js';
+import menuDaysRoute from './routes/menuDays.route.js';
 import cors from 'cors';
 import pool from "./db/db.js";
 const app = express();
@@ -19,6 +22,9 @@ app.get("/", async (req, res) => {
 });
 
 app.use('/api/users',userRoute);
-app.use('/api/complaints',userComplaints);
+app.use('/api/complaints',userComplaintsRoute);
+app.use('/api/foodItems',foodItemsRoute);
+app.use('/api/menu',menuRoute);
+app.use('/api/menudays',menuDaysRoute);
 
 export default app;

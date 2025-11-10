@@ -1,58 +1,82 @@
 import { useState, useEffect } from 'react';
-import { getFoodItems, createFoodItem, updateFoodItem, deleteFoodItem } from '../../api/mockApi';
+import {
+  getAllFoodItems,
+  createFoodItemAPI,
+  updateFoodItemAPI,
+  deleteFoodItemAPI,
+} from '../../lib/api.foodItems.js';
+
 import Card from '../../components/Card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Trash2, Edit2, Plus } from 'lucide-react';
+import { Trash2, Edit2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const FoodItemsTab = () => {
   const [items, setItems] = useState([]);
-  const [formData, setFormData] = useState({ name: '', category: 'breakfast' });
-  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({ food_name: "", category: "breakfast" });
 
-  const loadItems = () => {
-    setItems(getFoodItems());
+  const [editingId, setEditingId] = useState(null);
+  const [editValues, setEditValues] = useState({ food_name: "", category: "" });
+
+  const loadItems = async () => {
+    try {
+      const data = await getAllFoodItems();
+      setItems(data);
+    } catch (err) {
+      toast.error("Failed to load food items");
+    }
   };
 
   useEffect(() => {
     loadItems();
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingId) {
-      updateFoodItem(editingId, formData);
-      toast.success('Food item updated');
-      setEditingId(null);
-    } else {
-      createFoodItem(formData);
-      toast.success('Food item added');
+    try {
+      await createFoodItemAPI(formData);
+      toast.success("Food item added");
+      setFormData({ food_name: "", category: "breakfast" });
+      loadItems();
+    } catch (err) {
+      toast.error("Error adding food");
     }
-    setFormData({ name: '', category: 'breakfast' });
-    loadItems();
   };
 
-  const handleEdit = (item) => {
-    setFormData({ name: item.name, category: item.category });
-    setEditingId(item.id);
+  const startInlineEdit = (item) => {
+    setEditingId(item.food_item_id);
+    setEditValues({
+      food_name: item.food_name,
+      category: item.category,
+    });
   };
 
-  const handleDelete = (id) => {
-    deleteFoodItem(id);
-    loadItems();
-    toast.success('Food item deleted');
+  const saveInlineEdit = async (id) => {
+    try {
+      await updateFoodItemAPI(id, editValues);
+      toast.success("Food item updated");
+      setEditingId(null);
+      loadItems();
+    } catch (err) {
+      toast.error("Error updating");
+    }
   };
 
-  const getCategoryColor = (category) => {
-    switch (category) {
-      case 'breakfast': return 'bg-primary/10 text-primary';
-      case 'lunch': return 'bg-accent/10 text-accent';
-      case 'snacks': return 'bg-secondary/10 text-secondary-foreground';
-      case 'dinner': return 'bg-muted text-muted-foreground';
-      default: return 'bg-secondary text-secondary-foreground';
+  const cancelInlineEdit = () => {
+    setEditingId(null);
+    setEditValues({ food_name: "", category: "" });
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteFoodItemAPI(id);
+      toast.success("Deleted");
+      loadItems();
+    } catch (err) {
+      toast.error("Error deleting");
     }
   };
 
@@ -64,32 +88,28 @@ const FoodItemsTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Add Form */}
       <Card>
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {editingId ? 'Edit Food Item' : 'Add New Food Item'}
-        </h2>
+        <h2 className="text-xl font-semibold mb-4">Add New Food Item</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Food Name</Label>
+            <div>
+              <Label>Food Name</Label>
               <Input
-                id="name"
-                placeholder="e.g., Poha, Dal Rice"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                value={formData.food_name}
+                onChange={(e) => setFormData({ ...formData, food_name: e.target.value })}
                 required
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+            <div>
+              <Label>Category</Label>
               <Select
                 value={formData.category}
                 onValueChange={(value) => setFormData({ ...formData, category: value })}
               >
-                <SelectTrigger id="category">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="breakfast">Breakfast</SelectItem>
                   <SelectItem value="lunch">Lunch</SelectItem>
@@ -100,71 +120,78 @@ const FoodItemsTab = () => {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <Button type="submit" className="flex-1">
-              {editingId ? 'Update Item' : 'Add Item'}
-            </Button>
-            {editingId && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingId(null);
-                  setFormData({ name: '', category: 'breakfast' });
-                }}
-              >
-                Cancel
-              </Button>
-            )}
-          </div>
+          <Button type="submit" className="w-full">Add Item</Button>
         </form>
       </Card>
 
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Food Items Library</h2>
-        
-        {Object.keys(groupedItems).length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No food items added yet</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedItems).map(([category, categoryItems]) => (
-              <Card key={category}>
-                <h3 className="text-lg font-semibold text-foreground capitalize mb-4">
-                  {category}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {categoryItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
-                    >
-                      <span className="text-foreground font-medium">{item.name}</span>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(item)}
+      {/* Food List */}
+      <h2 className="text-xl font-semibold mb-4">Food Items Library</h2>
+
+      {Object.keys(groupedItems).length === 0 ? (
+        <div className="text-center py-12">No items yet</div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(groupedItems).map(([category, categoryItems]) => (
+            <Card key={category}>
+              <h3 className="text-lg font-semibold capitalize mb-4">{category}</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {categoryItems.map((item) => (
+                  <div key={item.food_item_id} className="p-3 rounded-lg border bg-card">
+
+                    {editingId === item.food_item_id ? (
+                      <>
+                        <Input
+                          className="mb-2"
+                          value={editValues.food_name}
+                          onChange={(e) => setEditValues({ ...editValues, food_name: e.target.value })}
+                        />
+
+                        <Select
+                          value={editValues.category}
+                          onValueChange={(value) => setEditValues({ ...editValues, category: value })}
                         >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          <SelectTrigger className="mb-2"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="breakfast">Breakfast</SelectItem>
+                            <SelectItem value="lunch">Lunch</SelectItem>
+                            <SelectItem value="snacks">Snacks</SelectItem>
+                            <SelectItem value="dinner">Dinner</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => saveInlineEdit(item.food_item_id)}>
+                            <Save className="h-4 w-4" />
+                          </Button>
+
+                          <Button size="sm" variant="outline" onClick={cancelInlineEdit}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{item.food_name}</span>
+
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => startInlineEdit(item)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(item.food_item_id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                    )}
+
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
