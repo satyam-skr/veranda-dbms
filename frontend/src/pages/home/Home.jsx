@@ -21,9 +21,9 @@ const Home = () => {
     },
     {
       title: 'Transport',
-      description: 'Coming soon',
+      description: 'Check Transport',
       icon: Bus,
-      disabled: true,
+      link: '/transport',
       color: 'text-muted-foreground'
     },
     {
