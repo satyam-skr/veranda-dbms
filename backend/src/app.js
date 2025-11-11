@@ -10,6 +10,7 @@ import autoRoute from "./routes/auto.route.js";
 import pollRoutes from "./routes/poll.route.js";
 import listingRoutes from './routes/listings.routes.js'
 import bidRoutes from './routes/bids.routes.js';
+import issuesRoutes from './routes/issues.route.js';
 import cors from 'cors';
 import pool from "./db/db.js";
 import path from "path";
@@ -55,6 +56,7 @@ app.use('/api/marketplace/listings', listingRoutes);
 app.use('/api/marketplace/bids', bidRoutes);
 
 
+app.use('/api/issues', issuesRoutes);
 
 
 function listRoutes(app) {

@@ -10,6 +10,7 @@ import TransportPage from "../pages/transport/TransportPage";
 import PollsPage from '../pages/shop/PollsPage';
 import PollDetails from '../components/polls/PollDetails';
 import Marketplace from '../pages/marketplace/Marketplace'
+import IssueForm from '../pages/issues/IssueForm';
 
 const Router = () => {
   return (
@@ -66,6 +67,16 @@ const Router = () => {
           </Protected>
         }
       />
+
+      <Route
+          path="/issues"
+          element={
+            <Protected>
+              <IssueForm />
+            </Protected>
+          }
+        />
+
     </Routes>
 
   );
