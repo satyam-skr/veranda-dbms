@@ -1,3 +1,5 @@
+// Mock API using localStorage
+
 const STORAGE_KEYS = {
   USERS: 'veranda_users',
   LISTINGS: 'veranda_listings',
@@ -13,7 +15,7 @@ const initData = () => {
   if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
     const demoUsers = [
       {
-        id: '1',
+        id: '0c5c27ff-7703-4297-a494-26fec3287928',
         fullName: 'Student Demo',
         email: 'student@demo.com',
         password: 'demo123',
@@ -29,7 +31,7 @@ const initData = () => {
         domainAdminOf: ['mess']
       },
       {
-        id: '3',
+        id: '0c5c27ff-7703-4297-a494-26fec3287928',
         fullName: 'Super Admin Demo',
         email: 'superadmin@demo.com',
         password: 'demo123',

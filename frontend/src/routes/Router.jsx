@@ -7,6 +7,8 @@ import OlxList from '../pages/olx/OlxList';
 import Mess from '../pages/mess/Mess';
 import SuperAdmin from '../pages/admin/SuperAdmin';
 import TransportPage from "../pages/transport/TransportPage";
+import PollsPage from '../pages/shop/PollsPage';
+import PollDetails from '../components/polls/PollDetails';
 
 const Router = () => {
   return (
@@ -50,7 +52,25 @@ const Router = () => {
           </Protected>
         }
       />
+      <Route
+        path="/shop/polls"
+        element={
+          <Protected>
+            <PollsPage />
+          </Protected>
+        }
+      />
+      
+      <Route
+        path="/shop/polls/:id"
+        element={
+          <Protected>
+            <PollDetails />
+          </Protected>
+        }
+      />
     </Routes>
+
   );
 };
 
