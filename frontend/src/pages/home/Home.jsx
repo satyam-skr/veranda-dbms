@@ -6,10 +6,10 @@ import Card from '../../components/Card';
 const Home = () => {
   const tiles = [
     {
-      title: 'OLX',
+      title: 'Marketplace',
       description: 'Buy and sell items within campus',
       icon: ShoppingBag,
-      link: '/olx',
+      link: '/marketplace',
       color: 'text-primary'
     },
     {

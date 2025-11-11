@@ -3,12 +3,13 @@ import Protected from '../components/Protected';
 import Login from '../pages/auth/Login';
 import Signup from '../pages/auth/Signup';
 import Home from '../pages/home/Home';
-import OlxList from '../pages/olx/OlxList';
+// import OlxList from '../pages/olx/OlxList';
 import Mess from '../pages/mess/Mess';
 import SuperAdmin from '../pages/admin/SuperAdmin';
 import TransportPage from "../pages/transport/TransportPage";
 import PollsPage from '../pages/shop/PollsPage';
 import PollDetails from '../components/polls/PollDetails';
+import Marketplace from '../pages/marketplace/Marketplace'
 
 const Router = () => {
   return (
@@ -27,12 +28,8 @@ const Router = () => {
       />
       
       <Route
-        path="/olx"
-        element={
-          <Protected>
-            <OlxList />
-          </Protected>
-        }
+        path="/marketplace"
+        element={<Marketplace />}
       />
       
       <Route

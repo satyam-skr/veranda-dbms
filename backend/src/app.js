@@ -8,6 +8,8 @@ import mealRatingRoute from './routes/mealRating.route.js';
 import transportRoute from "./routes/transport.route.js";
 import autoRoute from "./routes/auto.route.js";
 import pollRoutes from "./routes/poll.route.js";
+import listingRoutes from './routes/listings.routes.js'
+import bidRoutes from './routes/bids.routes.js';
 import cors from 'cors';
 import pool from "./db/db.js";
 import path from "path";
@@ -47,6 +49,13 @@ app.use("/api/transport/auto", autoRoute);
 app.use("/uploads", express.static(path.join(__dirname, "./uploads")));
 
 app.use("/api/polls", pollRoutes);
+
+
+app.use('/api/marketplace/listings', listingRoutes);
+app.use('/api/marketplace/bids', bidRoutes);
+
+
+
 
 function listRoutes(app) {
   const out = [];
