@@ -1,11 +1,11 @@
-// frontend/src/pages/transport/StudentTransportTab.tsx
 import { useState, useEffect } from "react";
 import axios from "axios";
-import  io  from "socket.io-client";
+import io from "socket.io-client";
 import { useAuth } from "../../context/AuthContext";
 import Card from "../../components/Card";
 import { Button } from "../../components/ui/button";
-import { Bus, Clock } from "lucide-react";
+import { Bus, Clock, RotateCw, MapPin } from "lucide-react";
+import { useToast } from "../../components/ui/use-toast";
 
 interface BusData {
   bus_id: number;
@@ -14,8 +14,7 @@ interface BusData {
   start_point: string;
   end_point: string;
   stops: string;
-  status: string;
-  status_updated_at?: string;
+  tracking_url?: string; // ✅ new field from backend
 }
 
 interface Timetable {
@@ -28,10 +27,12 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 const socket = io(API_BASE, { transports: ["websocket"] });
 
 const StudentTransportTab = () => {
+  const { toast } = useToast();
   const { currentUser } = useAuth();
   const [buses, setBuses] = useState<BusData[]>([]);
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const getImageUrl = (path: string) => {
     if (!path) return "";
@@ -41,20 +42,36 @@ const StudentTransportTab = () => {
       : `${API_BASE}/uploads/${normalized}`;
   };
 
-  /* ---------------------- FETCH INITIAL DATA ---------------------- */
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [busRes, timeRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/transport/bus/all`),
-          axios.get(`${API_BASE}/api/transport/timetable/all`),
-        ]);
-        setBuses(busRes.data.data);
-        setTimetables(timeRes.data.data);
-      } catch (err) {
-        console.error("Error fetching data:", err);
+  /* ---------------------- FETCH BUS DATA ---------------------- */
+  const fetchData = async (showToast = false) => {
+    try {
+      setLoading(true);
+      const [busRes, timeRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/transport/bus/all`),
+        axios.get(`${API_BASE}/api/transport/timetable/all`),
+      ]);
+      setBuses(busRes.data.data);
+      setTimetables(timeRes.data.data);
+
+      if (showToast) {
+        toast({
+          title: "Bus list refreshed",
+          description: "Latest data loaded successfully.",
+        });
       }
-    };
+    } catch (err) {
+      console.error("❌ Error fetching bus data:", err);
+      toast({
+        title: "Failed to load buses",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -63,11 +80,11 @@ const StudentTransportTab = () => {
     socket.on("connect", () => console.log("🟢 Connected to socket:", socket.id));
 
     socket.on("busStatusUpdated", (update: any) => {
-      console.log("📡 Bus status update received:", update);
+      console.log("📡 Bus update received:", update);
       setBuses((prev) =>
         prev.map((bus) =>
           bus.bus_id === update.bus_id
-            ? { ...bus, status: update.status, status_updated_at: update.status_updated_at }
+            ? { ...bus, status: update.status }
             : bus
         )
       );
@@ -79,78 +96,95 @@ const StudentTransportTab = () => {
     };
   }, []);
 
-  /* ---------------------- SHOW TIMETABLE ---------------------- */
+  /* ---------------------- HANDLE BUS CLICK ---------------------- */
   const handleBusClick = (bus_id: number) => {
     const busTimetables = timetables.filter((t) => t.bus_id === bus_id);
     if (busTimetables.length === 0) {
-      alert("No timetable uploaded for this bus yet.");
+      toast({
+        title: "No timetable available",
+        description: "No timetable uploaded for this bus yet.",
+      });
       return;
     }
-    const firstTimetable = busTimetables[0];
-    const imgUrl = getImageUrl(firstTimetable.image_path);
+    const imgUrl = getImageUrl(busTimetables[0].image_path);
     setPreviewImage(imgUrl);
   };
 
   /* ---------------------- RENDER ---------------------- */
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Bus className="w-6 h-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Available Buses</h2>
+      {/* Header with Refresh Button */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Bus className="w-6 h-6 text-primary" />
+          <h2 className="text-2xl font-bold text-foreground">Available Buses</h2>
+        </div>
+
+        <button
+          onClick={() => fetchData(true)}
+          title="Refresh Bus List"
+          className={`flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-transform duration-300 ${
+            loading ? "animate-spin" : ""
+          }`}
+          disabled={loading}
+        >
+          <RotateCw className="w-5 h-5 text-gray-600" />
+        </button>
       </div>
 
+      {/* Bus List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {buses.map((bus) => (
-          <Card
-            key={bus.bus_id}
-            onClick={() => handleBusClick(bus.bus_id)}
-            className="cursor-pointer hover:ring-2 hover:ring-primary transition p-4"
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="font-semibold text-foreground">
-                  {bus.bus_number} — {bus.route_name}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {bus.start_point} → {bus.end_point}
-                </p>
-                <p className="text-xs text-muted-foreground">Stops: {bus.stops}</p>
+        {buses.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center">No buses available.</p>
+        ) : (
+          buses.map((bus) => (
+            <Card
+              key={bus.bus_id}
+              onClick={() => handleBusClick(bus.bus_id)}
+              className="cursor-pointer hover:ring-2 hover:ring-primary transition p-4"
+            >
+              <div className="flex justify-between items-start">
+                {/* Left section */}
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {bus.bus_number} — {bus.route_name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {bus.start_point} → {bus.end_point}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Stops: {bus.stops}
+                  </p>
 
-                {/* 🚍 STATUS */}
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span
-                    className={`w-3 h-3 rounded-full ${
-                      bus.status === "At Gate"
-                        ? "bg-green-500"
-                        : bus.status === "Left Gate"
-                        ? "bg-yellow-500"
-                        : bus.status === "Delayed"
-                        ? "bg-orange-500"
-                        : bus.status === "Cancelled"
-                        ? "bg-red-500"
-                        : "bg-gray-400"
-                    }`}
-                  ></span>
-                  <span className="font-medium">
-                    {bus.status || "Status: Not Updated"}
-                  </span>
+                  {/* ✅ Track Live Button or Fallback */}
+                  {bus.tracking_url ? (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(bus.tracking_url, "_blank", "noopener,noreferrer");
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs mt-2 flex items-center gap-1"
+                    >
+                      <MapPin className="w-4 h-4" /> Track Live
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-2 italic">
+                      Tracking link not available
+                    </p>
+                  )}
                 </div>
 
-                {/* ⏰ TIME */}
-                {bus.status_updated_at && (
-                  <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                    <Clock className="w-3 h-3" />
-                    Updated at{" "}
-                    {new Date(bus.status_updated_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                )}
+                {/* Right section - Timetable Time */}
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">
+                    <Clock className="inline-block w-3 h-3 mr-1" />
+                    Tap to view timetable
+                  </p>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))
+        )}
       </div>
 
       {/* 🖼 Timetable Preview Modal */}

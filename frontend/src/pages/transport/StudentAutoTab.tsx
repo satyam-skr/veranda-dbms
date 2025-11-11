@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import Card from "../../components/Card";
-import { CarFront, Clock, RotateCw } from "lucide-react"; // ✅ Added refresh icon
+import { CarFront, Clock, RotateCw } from "lucide-react";
+import { useToast } from "../../components/ui/use-toast"; // ✅ added toast
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -15,27 +16,43 @@ interface AutoData {
 }
 
 const StudentAutoTab = () => {
+  const { toast } = useToast(); // ✅ use internal project toast
   const [autos, setAutos] = useState<AutoData[]>([]);
   const [refresh, setRefresh] = useState(false);
   const [loading, setLoading] = useState(false); // ✅ For button animation
 
-  const fetchAutos = async () => {
-    try {
-      setLoading(true);
-      const res = await axios.get(`${API_BASE}/api/transport/auto/all`);
-      setAutos(res.data.data || []);
-    } catch (err) {
-      console.error("❌ Error fetching autos:", err);
-    } finally {
-      setLoading(false);
+  const fetchAutos = async (showToast = false) => {
+  try {
+    setLoading(true);
+    const res = await axios.get(`${API_BASE}/api/transport/auto/all`);
+    setAutos(res.data.data || []);
+
+    if (showToast) {
+      toast({
+        title: "Auto status refreshed",
+        description: "Auto list updated successfully.",
+      });
     }
-  };
+  } catch (err) {
+    console.error("❌ Error fetching autos:", err);
+    if (showToast) {
+      toast({
+        title: "Failed to refresh autos",
+        description: "Could not update auto list. Please try again.",
+        variant: "destructive",
+      });
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     fetchAutos();
 
     // Auto-refresh every 10 seconds
-    const interval = setInterval(() => setRefresh((r) => !r), 10000);
+    const interval = setInterval(() => setRefresh((r) => !r), 60000);
     return () => clearInterval(interval);
   }, [refresh]);
 
@@ -87,7 +104,7 @@ const StudentAutoTab = () => {
 
         {/* 🔄 Refresh Button */}
         <button
-          onClick={fetchAutos}
+           onClick={() => fetchAutos(true)}
           title="Refresh Autos"
           className={`flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-transform duration-300 ${
             loading ? "animate-spin" : ""

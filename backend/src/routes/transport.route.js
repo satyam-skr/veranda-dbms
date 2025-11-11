@@ -1,11 +1,13 @@
+
 import express from "express";
 import multer from "multer";
 import { verifyRole } from "../middlewares/authMiddleware.js";
+
 import {
   addBusHandler,
   listBusesHandler,
   addDriverHandler,
-  updateBusHandler,       // ✅ Add this line
+  updateBusHandler,
   deleteBusHandler,
   listDriversHandler,
   uploadTimetableHandler,
@@ -15,9 +17,23 @@ import {
   deleteTimetableHandler,
 } from "../controllers/transport.controller.js";
 
-
-
 const router = express.Router();
+export const listBuses = async () => {
+  const query = `
+    SELECT 
+      bus_id, 
+      bus_number, 
+      route_name, 
+      start_point, 
+      end_point, 
+      stops,
+      tracking_url  -- ✅ include tracking_url in output
+    FROM transport_buses
+    ORDER BY bus_id ASC;
+  `;
+  const { rows } = await pool.query(query);
+  return rows;
+};
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "src/uploads/"),
@@ -26,15 +42,11 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ✅ Buses
+// ✅ Bus routes (mirror Auto structure)
 router.post("/bus/add", verifyRole(["super_admin"]), addBusHandler);
 router.get("/bus/all", listBusesHandler);
 router.put("/bus/update/:id", verifyRole(["super_admin"]), updateBusHandler);
-router.delete("/bus/:id", deleteBusHandler);
 router.delete("/bus/:id", verifyRole(["super_admin"]), deleteBusHandler);
-// ✅ Drivers
-router.post("/driver/add", verifyRole(["super_admin"]), addDriverHandler);
-router.get("/driver/all", listDriversHandler);
 
 // ✅ Timetables
 router.post(
@@ -44,12 +56,12 @@ router.post(
   uploadTimetableHandler
 );
 router.get("/timetable/all", listTimetablesHandler);
-
-// ✅ DELETE protected
 router.delete("/timetable/:id", verifyRole(["super_admin"]), deleteTimetableHandler);
 
-// ✅ Bus arrival controls
+// Bus arrival / status routes
 router.post("/bus/arrived", verifyRole(["super_admin"]), setBusArrivedHandler);
 router.post("/bus/reset", verifyRole(["super_admin"]), clearBusArrivedHandler);
+
+
 
 export default router;

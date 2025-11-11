@@ -1,22 +1,28 @@
-// server.js
+// backend/server.js
 import http from "http";
 import { Server } from "socket.io";
-import app from "./src/app.js";
-// server.js
-import "./src/ioInstance.js";
+import app from "./src/app.js"; // ✅ only one import, correct path
+import dotenv from "dotenv";
 
-// Create HTTP server instance
+dotenv.config();
+
+const PORT = process.env.PORT || 4000;
+
+// Create HTTP server
 const server = http.createServer(app);
 
-// ✅ Create Socket.IO instance and export it
-export const io = new Server(server, {
+// Create Socket.IO instance
+const io = new Server(server, {
   cors: {
-    origin: "http://localhost:8080", // frontend URL
+    origin: "http://localhost:8080", // your frontend
     methods: ["GET", "POST", "PUT", "DELETE"],
   },
 });
 
-// ✅ Socket connection event
+// Attach io to app for controller access
+app.set("io", io);
+
+// Socket connection
 io.on("connection", (socket) => {
   console.log("🟢 Client connected:", socket.id);
 
@@ -25,8 +31,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ Start the backend server
-const PORT = 4000;
+// Start server
 server.listen(PORT, () => {
   console.log(`🚍 Server running on http://localhost:${PORT}`);
 });

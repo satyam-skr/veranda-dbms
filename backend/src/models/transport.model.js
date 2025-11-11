@@ -1,15 +1,16 @@
 import pool from "../db/db.js";
 
-export const createBus = async ({ bus_number, route_name, start_point, end_point, stops }) => {
+export const createBus = async ({ bus_number, route_name, start_point, end_point, stops, tracking_url }) => {
   const query = `
-    INSERT INTO transport_buses (bus_number, route_name, start_point, end_point, stops)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO transport_buses (bus_number, route_name, start_point, end_point, stops, tracking_url)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING *;
   `;
-  const values = [bus_number, route_name, start_point, end_point, stops];
+  const values = [bus_number, route_name, start_point, end_point, stops, tracking_url];
   const { rows } = await pool.query(query, values);
   return rows[0];
 };
+
 
 export const getAllBuses = async () => {
   const { rows } = await pool.query("SELECT * FROM transport_buses ORDER BY created_at DESC;");
@@ -93,43 +94,41 @@ export const deleteTimetable = async (id) => {
 
 
 // ✅ Update an existing bus
-export const updateBus = async (id, { bus_number, route_name, start_point, end_point, stops }) => {
-  try {
-    const query = `
-      UPDATE transport_buses
-      SET bus_number = $1,
-          route_name = $2,
-          start_point = $3,
-          end_point = $4,
-          stops = $5
-      WHERE bus_id = $6
-      RETURNING *;
-    `;
-    const values = [bus_number, route_name, start_point, end_point, stops, id];
-    const result = await pool.query(query, values);
-
-    return result.rows[0];
-  } catch (err) {
-    console.error("❌ Error updating bus in model:", err);
-    throw err;
-  }
-};
-
-/* ---------------- AUTO MODELS ---------------- */
-
-
-
-export const updateBusStatus = async (bus_id, status) => {
+export const updateBus = async (bus_id, { bus_number, route_name, start_point, end_point, stops, tracking_url }) => {
   const query = `
     UPDATE transport_buses
-    SET status = $2, updated_at = NOW()
-    WHERE bus_id = $1
+    SET bus_number = $1,
+        route_name = $2,
+        start_point = $3,
+        end_point = $4,
+        stops = $5,
+        tracking_url = $6
+    WHERE bus_id = $7
     RETURNING *;
   `;
-  const { rows } = await pool.query(query, [bus_id, status]);
+  const values = [bus_number, route_name, start_point, end_point, stops, tracking_url, bus_id];
+  const { rows } = await pool.query(query, values);
   return rows[0];
 };
 
+
+
+export const listBuses = async () => {
+  const query = `
+    SELECT 
+      bus_id, 
+      bus_number, 
+      route_name, 
+      start_point, 
+      end_point, 
+      stops,
+      tracking_url
+    FROM transport_buses
+    ORDER BY bus_id ASC;
+  `;
+  const { rows } = await pool.query(query);
+  return rows;
+};
 
 
 

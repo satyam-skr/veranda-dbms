@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import pool from "../db/db.js";
-import { io } from "../../server.js";
+
 
 import {
   createBus,
@@ -16,7 +16,6 @@ import {
   resetBusArrival,
   deleteTimetable,
   getTimetableById,
-  updateBusStatus,
 } from "../models/transport.model.js";
 
 // ✅ Fix __dirname for ES Modules
@@ -218,33 +217,4 @@ export const listTimetablesHandler = async (req, res) => {
 
 
 
-export const updateBusStatusHandler = async (req, res) => {
-  try {
-    const { bus_id, status } = req.body;
-    if (!bus_id || !status) {
-      return res.status(400).json({ success: false, message: "Missing bus_id or status" });
-    }
 
-    const updatedBus = await updateBusStatus(bus_id, status);
-    if (!updatedBus) {
-      return res.status(404).json({ success: false, message: "Bus not found" });
-    }
-
-    // Emit realtime update 🚀
-    
-    io.emit("busStatusUpdated", {
-      bus_id,
-      status,
-      status_updated_at: updatedBus.status_updated_at,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Bus status updated successfully",
-      data: updatedBus,
-    });
-  } catch (err) {
-    console.error("❌ Error updating bus status:", err);
-    res.status(500).json({ success: false, message: "Error updating bus status" });
-  }
-};
