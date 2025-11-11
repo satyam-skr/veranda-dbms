@@ -63,20 +63,33 @@ const AdminTransportTab = () => {
     headers: { "x-user-role": currentUser?.roles?.[0] || "super_admin" },
   });
 
+  // ✅ Fixed IST time formatting (adds +5:30 hours)
   const formatDateTime = (timestamp?: string) => {
     if (!timestamp) return "Just now";
-    const date = new Date(timestamp);
-    const time = date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-    const day = date.toLocaleDateString([], {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-    return `${time} · ${day}`;
+
+    try {
+      const utcDate = new Date(timestamp);
+
+      // Add +5:30 hours offset manually (in ms)
+      const istDate = new Date(utcDate.getTime() + 5.5 * 60 * 60 * 1000);
+
+      const time = istDate.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      const day = istDate.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+
+      return `${time} · ${day}`;
+    } catch (error) {
+      console.error("Time formatting error:", error);
+      return "Invalid date";
+    }
   };
 
   /* ---------------------- FETCH DATA ---------------------- */

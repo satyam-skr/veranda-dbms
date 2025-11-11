@@ -36,22 +36,38 @@ const StudentTransportTab = () => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ✅ Helper: format date-time nicely
-  const formatDateTime = (timestamp?: string) => {
-    if (!timestamp) return "Just now";
-    const date = new Date(timestamp);
-    const time = date.toLocaleTimeString([], {
+  // Robust IST formatter
+const formatDateTime = (timestamp?: string) => {
+  if (!timestamp) return "Just now";
+
+  try {
+    // Create a Date object from the raw timestamp
+    const utcDate = new Date(timestamp);
+
+    // Add 5 hours 30 minutes (in milliseconds)
+    const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+
+    // Format the time nicely in IST
+    const time = istDate.toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
-    const day = date.toLocaleDateString([], {
+
+    const day = istDate.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
+
     return `${time} · ${day}`;
-  };
+  } catch (err) {
+    console.error("Error parsing date:", err);
+    return "Invalid date";
+  }
+};
+
+
 
   const getImageUrl = (path: string) => {
     if (!path) return "";
@@ -254,4 +270,3 @@ const StudentTransportTab = () => {
 };
 
 export default StudentTransportTab;
-
