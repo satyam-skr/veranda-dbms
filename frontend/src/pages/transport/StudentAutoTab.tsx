@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import Card from "../../components/Card";
-import { CarFront, Clock, RotateCw } from "lucide-react";
-import { useToast } from "../../components/ui/use-toast"; // ✅ added toast
+import { useToast } from "../../components/ui/use-toast";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -16,42 +15,39 @@ interface AutoData {
 }
 
 const StudentAutoTab = () => {
-  const { toast } = useToast(); // ✅ use internal project toast
+  const { toast } = useToast();
   const [autos, setAutos] = useState<AutoData[]>([]);
   const [refresh, setRefresh] = useState(false);
-  const [loading, setLoading] = useState(false); // ✅ For button animation
+  const [loading, setLoading] = useState(false);
 
   const fetchAutos = async (showToast = false) => {
-  try {
-    setLoading(true);
-    const res = await axios.get(`${API_BASE}/api/transport/auto/all`);
-    setAutos(res.data.data || []);
+    try {
+      setLoading(true);
+      const res = await axios.get(`${API_BASE}/api/transport/auto/all`);
+      setAutos(res.data.data || []);
 
-    if (showToast) {
-      toast({
-        title: "Auto status refreshed",
-        description: "Auto list updated successfully.",
-      });
+      if (showToast) {
+        toast({
+          title: "Auto status refreshed",
+          description: "Auto list updated successfully.",
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching autos:", err);
+      if (showToast) {
+        toast({
+          title: "Failed to refresh autos",
+          description: "Could not update auto list. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("❌ Error fetching autos:", err);
-    if (showToast) {
-      toast({
-        title: "Failed to refresh autos",
-        description: "Could not update auto list. Please try again.",
-        variant: "destructive",
-      });
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   useEffect(() => {
     fetchAutos();
-
-    // Auto-refresh every 10 seconds
     const interval = setInterval(() => setRefresh((r) => !r), 60000);
     return () => clearInterval(interval);
   }, [refresh]);
@@ -60,23 +56,14 @@ const StudentAutoTab = () => {
   const formatDateTime = (timestamp?: string) => {
     if (!timestamp) return "Just now";
 
-    // Fix common backend format "YYYY-MM-DD HH:mm:ss"
     let formatted = timestamp.trim();
-    if (formatted.includes(" ")) {
-      formatted = formatted.replace(" ", "T");
-    }
-
-    // Add Z (UTC) if missing
-    if (!formatted.endsWith("Z")) {
-      formatted += "Z";
-    }
+    if (formatted.includes(" ")) formatted = formatted.replace(" ", "T");
+    if (!formatted.endsWith("Z")) formatted += "Z";
 
     const utcDate = new Date(formatted);
     if (isNaN(utcDate.getTime())) return "Invalid date";
 
-    // Convert to IST (+5:30)
-    const istOffsetMs = 5.5 * 60 * 60 * 1000;
-    const istDate = new Date(utcDate.getTime() + istOffsetMs);
+    const istDate = new Date(utcDate.getTime() + 5.5 * 60 * 60 * 1000);
 
     const time = istDate.toLocaleTimeString("en-IN", {
       hour: "2-digit",
@@ -97,21 +84,18 @@ const StudentAutoTab = () => {
     <div className="space-y-6">
       {/* Header section with Refresh button */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <CarFront className="w-6 h-6 text-primary" />
-          <h2 className="text-2xl font-bold text-foreground">Available Autos</h2>
-        </div>
+        <h2 className="text-2xl font-bold text-foreground">Available Autos</h2>
 
-        {/* 🔄 Refresh Button */}
+        {/* Refresh Button */}
         <button
-           onClick={() => fetchAutos(true)}
+          onClick={() => fetchAutos(true)}
           title="Refresh Autos"
-          className={`flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-transform duration-300 ${
-            loading ? "animate-spin" : ""
+          className={`px-4 py-1 text-sm rounded-md border border-gray-300 hover:bg-gray-100 transition ${
+            loading ? "opacity-50 cursor-not-allowed" : ""
           }`}
           disabled={loading}
         >
-          <RotateCw className="w-5 h-5 text-gray-600" />
+          {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -126,9 +110,8 @@ const StudentAutoTab = () => {
               key={auto.auto_id}
               className="p-4 flex flex-col justify-between shadow-sm rounded-xl border border-gray-100"
             >
-              {/* Top section: left info + right status */}
               <div className="flex justify-between items-start">
-                {/* Left info */}
+                {/* Left section */}
                 <div>
                   <p className="font-semibold text-foreground text-base">
                     {auto.auto_number}
@@ -138,7 +121,7 @@ const StudentAutoTab = () => {
                   </p>
                 </div>
 
-                {/* Right-aligned status */}
+                {/* Right section */}
                 <div className="text-right">
                   <p
                     className={`font-semibold text-sm ${
@@ -151,10 +134,9 @@ const StudentAutoTab = () => {
                   >
                     {auto.status || "Unavailable"}
                   </p>
-                  <div className="flex items-center justify-end gap-1 text-gray-500 text-xs mt-1">
-                    <Clock className="w-3 h-3" />
-                    <span>{formatDateTime(auto.status_updated_at)}</span>
-                  </div>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {formatDateTime(auto.status_updated_at)}
+                  </p>
                 </div>
               </div>
             </Card>

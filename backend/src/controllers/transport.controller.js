@@ -3,7 +3,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import pool from "../db/db.js";
 
-
 import {
   createBus,
   updateBus,
@@ -22,12 +21,28 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
-
 /* ---------------- BUS HANDLERS ---------------- */
 export const addBusHandler = async (req, res) => {
   try {
-    const bus = await createBus(req.body);
+    // ✅ include tracking_url when creating
+    const {
+      bus_number,
+      route_name,
+      start_point,
+      end_point,
+      stops,
+      tracking_url = null,
+    } = req.body;
+
+    const bus = await createBus({
+      bus_number,
+      route_name,
+      start_point,
+      end_point,
+      stops,
+      tracking_url,
+    });
+
     res.status(201).json({ success: true, data: bus });
   } catch (err) {
     console.error("Error adding bus:", err);
@@ -38,14 +53,25 @@ export const addBusHandler = async (req, res) => {
 export const updateBusHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { bus_number, route_name, start_point, end_point, stops } = req.body;
+    // ✅ include tracking_url here too
+    const {
+      bus_number,
+      route_name,
+      start_point,
+      end_point,
+      stops,
+      tracking_url = null,
+    } = req.body;
+
     const updatedBus = await updateBus(id, {
       bus_number,
       route_name,
       start_point,
       end_point,
       stops,
+      tracking_url,
     });
+
     res.status(200).json({ success: true, data: updatedBus });
   } catch (err) {
     console.error("Error updating bus:", err);
@@ -97,7 +123,6 @@ export const uploadTimetableHandler = async (req, res) => {
       });
     }
 
-    // ✅ Add record to database
     const timetable = await addTimetable({ bus_id, image_path: imagePath });
 
     res.status(201).json({
@@ -114,8 +139,6 @@ export const uploadTimetableHandler = async (req, res) => {
   }
 };
 
-
-
 /* ✅ DELETE TIMETABLE HANDLER */
 export const deleteTimetableHandler = async (req, res) => {
   try {
@@ -124,7 +147,9 @@ export const deleteTimetableHandler = async (req, res) => {
 
     const timetable = await getTimetableById(id);
     if (!timetable) {
-      return res.status(404).json({ success: false, message: "Timetable not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Timetable not found" });
     }
 
     const filePath = path.resolve(timetable.image_path);
@@ -134,10 +159,14 @@ export const deleteTimetableHandler = async (req, res) => {
     }
 
     await deleteTimetable(id);
-    res.status(200).json({ success: true, message: "Timetable deleted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Timetable deleted successfully" });
   } catch (err) {
     console.error("❌ Error deleting timetable:", err);
-    res.status(500).json({ success: false, message: "Error deleting timetable" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error deleting timetable" });
   }
 };
 
@@ -168,7 +197,9 @@ export const clearBusArrivedHandler = async (req, res) => {
     });
   } catch (err) {
     console.error("Error resetting arrival:", err);
-    res.status(500).json({ success: false, message: "Error resetting arrival" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error resetting arrival" });
   }
 };
 
@@ -178,13 +209,20 @@ export const deleteBusHandler = async (req, res) => {
     const { id } = req.params;
     console.log("🗑 Deleting bus with ID:", id);
 
-    const result = await pool.query("DELETE FROM transport_buses WHERE bus_id = $1 RETURNING *", [id]);
+    const result = await pool.query(
+      "DELETE FROM transport_buses WHERE bus_id = $1 RETURNING *",
+      [id]
+    );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ success: false, message: "Bus not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Bus not found" });
     }
 
-    res.status(200).json({ success: true, message: "Bus deleted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Bus deleted successfully" });
   } catch (err) {
     console.error("❌ Error deleting bus:", err);
     res.status(500).json({ success: false, message: "Error deleting bus" });
@@ -195,26 +233,69 @@ export const listTimetablesHandler = async (req, res) => {
   try {
     const timetables = await getAllTimetables();
 
-    // Build full public URL for each timetable (normalizing backslashes)
-    const host = `${req.protocol}://${req.get('host')}`;
+    const host = `${req.protocol}://${req.get("host")}`;
     const mapped = timetables.map((row) => {
       const normalized = (row.image_path || "").replace(/\\/g, "/");
-      // If image_path already starts with uploads/ use it, otherwise try to be safe
-      const pathPart = normalized.startsWith("uploads/") ? normalized : `uploads/${normalized}`;
+      const pathPart = normalized.startsWith("uploads/")
+        ? normalized
+        : `uploads/${normalized}`;
       return {
         ...row,
-        public_url: `${host}/${pathPart}`
+        public_url: `${host}/${pathPart}`,
       };
     });
 
     res.status(200).json({ success: true, data: mapped });
   } catch (err) {
     console.error("Error fetching timetables:", err);
-    res.status(500).json({ success: false, message: "Error fetching timetables" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching timetables" });
   }
 };
 
+/* ---------------- ETA CALCULATOR ---------------- */
+export const getBusETAHandler = async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT bus_id, bus_number, route_name, schedule FROM transport_buses"
+    );
+    const now = new Date();
 
+    const buses = result.rows.map((bus) => {
+      if (!bus.schedule || !bus.schedule.times) {
+        return { ...bus, next_arrival: null, eta_minutes: null };
+      }
 
+      const times = bus.schedule.times;
+      let nextArrival = null;
+      let etaMinutes = null;
 
+      for (const t of times) {
+        const todayTime = new Date(`${now.toDateString()} ${t}`);
+        if (todayTime > now) {
+          nextArrival = t;
+          etaMinutes = Math.round((todayTime - now) / 60000);
+          break;
+        }
+      }
 
+      if (!nextArrival) {
+        return {
+          ...bus,
+          next_arrival: "No more buses today",
+          eta_minutes: null,
+        };
+      }
+
+      return { ...bus, next_arrival: nextArrival, eta_minutes: etaMinutes };
+    });
+
+    res.status(200).json({ success: true, data: buses });
+  } catch (err) {
+    console.error("Error calculating ETA:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Error calculating ETA" });
+  }
+};

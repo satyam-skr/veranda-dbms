@@ -36,38 +36,32 @@ const StudentTransportTab = () => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Robust IST formatter
-const formatDateTime = (timestamp?: string) => {
-  if (!timestamp) return "Just now";
+  // ✅ Robust IST time formatter
+  const formatDateTime = (timestamp?: string) => {
+    if (!timestamp) return "Just now";
 
-  try {
-    // Create a Date object from the raw timestamp
-    const utcDate = new Date(timestamp);
+    try {
+      const utcDate = new Date(timestamp);
+      const istDate = new Date(utcDate.getTime() + 5.5 * 60 * 60 * 1000);
 
-    // Add 5 hours 30 minutes (in milliseconds)
-    const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+      const time = istDate.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
 
-    // Format the time nicely in IST
-    const time = istDate.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+      const day = istDate.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
 
-    const day = istDate.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-
-    return `${time} · ${day}`;
-  } catch (err) {
-    console.error("Error parsing date:", err);
-    return "Invalid date";
-  }
-};
-
-
+      return `${time} · ${day}`;
+    } catch (err) {
+      console.error("Error parsing date:", err);
+      return "Invalid date";
+    }
+  };
 
   const getImageUrl = (path: string) => {
     if (!path) return "";
@@ -190,9 +184,6 @@ const formatDateTime = (timestamp?: string) => {
                   <p className="text-sm text-muted-foreground">
                     {bus.start_point} → {bus.end_point}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Stops: {bus.stops}
-                  </p>
 
                   {/* ✅ Live Tracking Button */}
                   {bus.tracking_url ? (
@@ -203,7 +194,7 @@ const formatDateTime = (timestamp?: string) => {
                       }}
                       className="bg-green-600 hover:bg-green-700 text-white text-xs mt-2 flex items-center gap-1"
                     >
-                      <MapPin className="w-4 h-4" /> Track Live
+                      <MapPin className="w-4 h-4" /> Track Bus
                     </Button>
                   ) : (
                     <p className="text-xs text-gray-400 mt-2 italic">

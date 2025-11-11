@@ -3,7 +3,6 @@ import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import Card from "../../components/Card";
 import { Button } from "../../components/ui/button";
-import { CarFront, ChevronDown } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
   DropdownMenu,
@@ -73,14 +72,14 @@ const AdminAutoTab = () => {
         },
       });
       toast({
-        title: "✅ Auto Added Successfully",
+        title: "Auto Added Successfully",
         description: `${data.auto_number} — ${data.driver_name}`,
       });
       form.reset();
       setRefresh(!refresh);
     } catch (err: any) {
       toast({
-        title: "❌ Failed to Add Auto",
+        title: "Failed to Add Auto",
         description: err.response?.data?.message || "Internal Server Error",
         variant: "destructive",
       });
@@ -100,13 +99,13 @@ const AdminAutoTab = () => {
     try {
       await axios.put(`${API_BASE}/api/transport/auto/update/${auto_id}`, updated, getAuthHeaders());
       toast({
-        title: "✅ Auto Updated Successfully",
+        title: "Auto Updated Successfully",
         description: `${updated.auto_number} — ${updated.driver_name}`,
       });
       setEditingAutoId(null);
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Failed to Update Auto", variant: "destructive" });
+      toast({ title: "Failed to Update Auto", variant: "destructive" });
     }
   };
 
@@ -116,13 +115,13 @@ const AdminAutoTab = () => {
     try {
       await axios.delete(`${API_BASE}/api/transport/auto/${auto_id}`, getAuthHeaders());
       toast({
-        title: "🗑 Auto Deleted",
+        title: "Auto Deleted",
         description: "The auto record was removed successfully.",
       });
       setRefresh(!refresh);
     } catch {
       toast({
-        title: "❌ Failed to Delete Auto",
+        title: "Failed to Delete Auto",
         variant: "destructive",
       });
     }
@@ -133,13 +132,13 @@ const AdminAutoTab = () => {
     try {
       await axios.post(`${API_BASE}/api/transport/auto/status/update`, { auto_id, status }, getAuthHeaders());
       toast({
-        title: "🚦 Auto Status Updated",
+        title: "Auto Status Updated",
         description: `Marked as ${status}`,
       });
       setRefresh(!refresh);
     } catch {
       toast({
-        title: "❌ Failed to Update Status",
+        title: "Failed to Update Status",
         variant: "destructive",
       });
     }
@@ -150,15 +149,13 @@ const AdminAutoTab = () => {
     <div className="space-y-8">
       {/* Add Auto */}
       <Card className="p-5">
-        <h3 className="text-lg font-semibold mb-3 text-primary flex items-center gap-2">
-          <CarFront className="w-5 h-5 text-primary" /> Add New Auto
-        </h3>
+        <h3 className="text-lg font-semibold mb-3 text-primary">Add New Auto</h3>
         <form onSubmit={handleAddAuto} className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <input name="auto_number" placeholder="Auto Number" className="border p-2 rounded" required />
           <input name="driver_name" placeholder="Driver Name" className="border p-2 rounded" required />
           <input name="phone_number" placeholder="Phone Number" className="border p-2 rounded" required />
           <Button type="submit" className="col-span-2 bg-primary text-white hover:bg-primary/90">
-            ➕ Add Auto
+            Add Auto
           </Button>
         </form>
       </Card>
@@ -169,10 +166,10 @@ const AdminAutoTab = () => {
         <div className="space-y-4">
           {autos.map((auto) => {
             const currentStatus =
-              STATUS_OPTIONS.find((s) => s.value === auto.status) || STATUS_OPTIONS[4]; // fallback to "Unavailable"
+              STATUS_OPTIONS.find((s) => s.value === auto.status) || STATUS_OPTIONS[4];
 
             return (
-              <Card key={auto.auto_id} className="p-4">
+              <Card key={auto.auto_id} className="p-4 border border-gray-200 shadow-sm rounded-lg">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="font-semibold">{auto.auto_number}</p>
@@ -186,15 +183,10 @@ const AdminAutoTab = () => {
                   </div>
 
                   <div className="flex gap-2 items-center">
-                    {/* ✅ Clean Dropdown Menu for Status Update */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex items-center gap-1 border-gray-400"
-                        >
-                          Change Status <ChevronDown className="w-4 h-4" />
+                        <Button size="sm" variant="outline" className="border-gray-400">
+                          Change Status
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
@@ -214,10 +206,10 @@ const AdminAutoTab = () => {
                     </DropdownMenu>
 
                     <Button size="sm" variant="secondary" onClick={() => setEditingAutoId(auto.auto_id)}>
-                      ✏️ Edit
+                      Edit
                     </Button>
                     <Button size="sm" className="bg-red-600 text-white" onClick={() => handleDeleteAuto(auto.auto_id)}>
-                      🗑 Delete
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -231,12 +223,8 @@ const AdminAutoTab = () => {
                     <input name="driver_name" defaultValue={auto.driver_name} className="border p-2 rounded" required />
                     <input name="phone_number" defaultValue={auto.phone_number} className="border p-2 rounded" required />
                     <div className="col-span-2 flex gap-3">
-                      <Button type="submit" className="bg-green-600 text-white">
-                        💾 Save
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => setEditingAutoId(null)}>
-                        ✖ Cancel
-                      </Button>
+                      <Button type="submit" className="bg-green-600 text-white">Save</Button>
+                      <Button type="button" variant="secondary" onClick={() => setEditingAutoId(null)}>Cancel</Button>
                     </div>
                   </form>
                 )}

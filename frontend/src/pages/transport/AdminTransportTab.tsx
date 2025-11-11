@@ -2,15 +2,6 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Card from "../../components/Card";
 import { Button } from "../../components/ui/button";
-import {
-  Bus,
-  Clock,
-  Calendar,
-  ChevronDown,
-  Trash,
-  ExternalLink,
-  Pencil,
-} from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -35,7 +26,6 @@ interface BusData {
   route_name: string;
   start_point: string;
   end_point: string;
-  stops: string;
   tracking_url?: string;
   has_arrived?: boolean;
   status_updated_at?: string;
@@ -63,31 +53,24 @@ const AdminTransportTab = () => {
     headers: { "x-user-role": currentUser?.roles?.[0] || "super_admin" },
   });
 
-  // ✅ Fixed IST time formatting (adds +5:30 hours)
+  // ✅ Time formatting (IST)
   const formatDateTime = (timestamp?: string) => {
     if (!timestamp) return "Just now";
-
     try {
       const utcDate = new Date(timestamp);
-
-      // Add +5:30 hours offset manually (in ms)
       const istDate = new Date(utcDate.getTime() + 5.5 * 60 * 60 * 1000);
-
       const time = istDate.toLocaleTimeString("en-IN", {
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
       });
-
       const day = istDate.toLocaleDateString("en-IN", {
         day: "numeric",
         month: "short",
         year: "numeric",
       });
-
       return `${time} · ${day}`;
-    } catch (error) {
-      console.error("Time formatting error:", error);
+    } catch {
       return "Invalid date";
     }
   };
@@ -116,9 +99,9 @@ const AdminTransportTab = () => {
       const updatedBus: BusData = res.data?.data;
       if (updatedBus)
         setBuses((prev) => prev.map((b) => (b.bus_id === bus_id ? updatedBus : b)));
-      toast({ title: "✅ Bus Marked as Arrived" });
+      toast({ title: "Bus marked as arrived" });
     } catch {
-      toast({ title: "❌ Failed to Mark as Arrived", variant: "destructive" });
+      toast({ title: "Failed to mark as arrived", variant: "destructive" });
     }
   };
 
@@ -128,9 +111,9 @@ const AdminTransportTab = () => {
       const updatedBus: BusData = res.data?.data;
       if (updatedBus)
         setBuses((prev) => prev.map((b) => (b.bus_id === bus_id ? updatedBus : b)));
-      toast({ title: "🟡 Bus Left" });
+      toast({ title: "Bus left" });
     } catch {
-      toast({ title: "❌ Failed to Update Status", variant: "destructive" });
+      toast({ title: "Failed to update status", variant: "destructive" });
     }
   };
 
@@ -143,16 +126,15 @@ const AdminTransportTab = () => {
       route_name: (form.route_name as HTMLInputElement).value,
       start_point: (form.start_point as HTMLInputElement).value,
       end_point: (form.end_point as HTMLInputElement).value,
-      stops: (form.stops as HTMLInputElement).value,
       tracking_url: (form.tracking_url as HTMLInputElement).value || null,
     };
     try {
       await axios.post(`${API_BASE}/api/transport/bus/add`, data, getAuthHeaders());
-      toast({ title: "✅ Bus Added Successfully", description: `${data.bus_number}` });
+      toast({ title: "Bus added successfully" });
       form.reset();
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Failed to Add Bus", variant: "destructive" });
+      toast({ title: "Failed to add bus", variant: "destructive" });
     }
   };
 
@@ -165,16 +147,15 @@ const AdminTransportTab = () => {
       route_name: (form.route_name as HTMLInputElement).value,
       start_point: (form.start_point as HTMLInputElement).value,
       end_point: (form.end_point as HTMLInputElement).value,
-      stops: (form.stops as HTMLInputElement).value,
       tracking_url: (form.tracking_url as HTMLInputElement).value || null,
     };
     try {
       await axios.put(`${API_BASE}/api/transport/bus/update/${bus_id}`, updated, getAuthHeaders());
-      toast({ title: "✅ Bus Updated Successfully" });
+      toast({ title: "Bus updated successfully" });
       setEditingBusId(null);
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Failed to Update Bus", variant: "destructive" });
+      toast({ title: "Failed to update bus", variant: "destructive" });
     }
   };
 
@@ -183,17 +164,17 @@ const AdminTransportTab = () => {
     if (!confirm("Delete this bus and its timetables?")) return;
     try {
       await axios.delete(`${API_BASE}/api/transport/bus/${bus_id}`, getAuthHeaders());
-      toast({ title: "🗑 Bus Deleted" });
+      toast({ title: "Bus deleted" });
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Failed to Delete Bus", variant: "destructive" });
+      toast({ title: "Failed to delete bus", variant: "destructive" });
     }
   };
 
   /* ---------------------- TIMETABLE UPLOAD / DELETE ---------------------- */
   const handleUpload = async () => {
     if (!file || !selectedBus)
-      return toast({ title: "⚠️ Please select a file", variant: "destructive" });
+      return toast({ title: "Please select a file", variant: "destructive" });
 
     const formData = new FormData();
     formData.append("bus_id", selectedBus.bus_id.toString());
@@ -201,12 +182,12 @@ const AdminTransportTab = () => {
     setLoading(true);
     try {
       await axios.post(`${API_BASE}/api/transport/timetable/upload`, formData, getAuthHeaders());
-      toast({ title: "📅 Timetable Uploaded Successfully" });
+      toast({ title: "Timetable uploaded successfully" });
       setFile(null);
       setOpenModal(false);
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Upload Failed", variant: "destructive" });
+      toast({ title: "Upload failed", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -216,11 +197,11 @@ const AdminTransportTab = () => {
     if (!confirm("Are you sure you want to delete this timetable?")) return;
     try {
       await axios.delete(`${API_BASE}/api/transport/timetable/${timetable_id}`, getAuthHeaders());
-      toast({ title: "🗑 Timetable Deleted" });
+      toast({ title: "Timetable deleted" });
       setOpenModal(false);
       setRefresh(!refresh);
     } catch {
-      toast({ title: "❌ Failed to Delete Timetable", variant: "destructive" });
+      toast({ title: "Failed to delete timetable", variant: "destructive" });
     }
   };
 
@@ -232,22 +213,19 @@ const AdminTransportTab = () => {
     <div className="space-y-8">
       {/* Add Bus */}
       <Card className="p-5">
-        <h3 className="text-lg font-semibold mb-3 text-primary flex items-center gap-2">
-          <Bus className="w-5 h-5 text-primary" /> Add New Bus
-        </h3>
+        <h3 className="text-lg font-semibold mb-3 text-primary">Add New Bus</h3>
         <form onSubmit={handleAddBus} className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <input name="bus_number" placeholder="Bus Number" className="border p-2 rounded" required />
           <input name="route_name" placeholder="Route Name" className="border p-2 rounded" required />
           <input name="start_point" placeholder="Start Point" className="border p-2 rounded" required />
           <input name="end_point" placeholder="End Point" className="border p-2 rounded" required />
-          <input name="stops" placeholder="Stops (comma-separated)" className="border p-2 rounded col-span-2" required />
           <input
             name="tracking_url"
             placeholder="Tracking URL (optional)"
             className="border p-2 rounded col-span-2"
           />
           <Button type="submit" className="col-span-2 bg-primary text-white hover:bg-primary/90">
-            ➕ Add Bus
+            Add Bus
           </Button>
         </form>
       </Card>
@@ -264,10 +242,8 @@ const AdminTransportTab = () => {
                   <div>
                     <p className="font-semibold">{bus.bus_number} — {bus.route_name}</p>
                     <p className="text-sm text-muted-foreground">{bus.start_point} → {bus.end_point}</p>
-                    <p className="text-xs text-muted-foreground">Stops: {bus.stops}</p>
 
-                    <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                      <Clock className="w-3 h-3" />
+                    <div className="text-xs text-gray-500 mt-1">
                       Last Updated: {formatDateTime(bus.status_updated_at)}
                     </div>
 
@@ -286,7 +262,7 @@ const AdminTransportTab = () => {
                         rel="noopener noreferrer"
                         className="text-blue-600 text-xs mt-1 underline block"
                       >
-                        Track Live ↗
+                        Track Live
                       </a>
                     ) : (
                       <p className="text-xs text-gray-500 mt-1 italic">No tracking link added</p>
@@ -294,56 +270,52 @@ const AdminTransportTab = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-2 justify-end">
-                    {/* 🔽 Status Dropdown */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="sm" className="bg-green-700 text-white flex items-center gap-1">
-                          <ChevronDown className="w-4 h-4" /> Update Status
+                        <Button size="sm" className="bg-green-700 text-white">
+                          Update Status
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
                         <DropdownMenuItem onClick={() => handleMarkArrived(bus.bus_id)}>
-                          🟢 Bus Arrived
+                          Bus Arrived
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleMarkLeft(bus.bus_id)}>
-                          🟡 Bus Left
+                          Bus Left
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* ✏️ Edit */}
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => setEditingBusId(bus.bus_id)}
                     >
-                      <Pencil className="w-4 h-4" /> Edit
+                      Edit
                     </Button>
 
-                    {/* Timetable */}
                     <Button
                       size="sm"
-                      className="bg-indigo-600 text-white flex items-center gap-1"
+                      className="bg-indigo-600 text-white"
                       onClick={() => {
                         setSelectedBus(bus);
                         setOpenModal(true);
                       }}
                     >
-                      <Calendar className="w-4 h-4" /> Timetable
+                      Timetable
                     </Button>
 
-                    {/* Delete */}
                     <Button
                       size="sm"
                       className="bg-red-600 text-white"
                       onClick={() => handleDeleteBus(bus.bus_id)}
                     >
-                      <Trash className="w-4 h-4" /> Delete
+                      Delete
                     </Button>
                   </div>
                 </div>
 
-                {/* ✏️ Edit Form */}
+                {/* Edit Form */}
                 {editingBusId === bus.bus_id && (
                   <form
                     onSubmit={(e) => handleEditSave(e, bus.bus_id)}
@@ -353,7 +325,6 @@ const AdminTransportTab = () => {
                     <input name="route_name" defaultValue={bus.route_name} className="border p-2 rounded" required />
                     <input name="start_point" defaultValue={bus.start_point} className="border p-2 rounded" required />
                     <input name="end_point" defaultValue={bus.end_point} className="border p-2 rounded" required />
-                    <input name="stops" defaultValue={bus.stops} className="border p-2 rounded col-span-2" required />
                     <input
                       name="tracking_url"
                       defaultValue={bus.tracking_url || ""}
@@ -361,8 +332,8 @@ const AdminTransportTab = () => {
                       className="border p-2 rounded col-span-2"
                     />
                     <div className="col-span-2 flex gap-3">
-                      <Button type="submit" className="bg-green-600 text-white">💾 Save</Button>
-                      <Button type="button" variant="secondary" onClick={() => setEditingBusId(null)}>✖ Cancel</Button>
+                      <Button type="submit" className="bg-green-600 text-white">Save</Button>
+                      <Button type="button" variant="secondary" onClick={() => setEditingBusId(null)}>Cancel</Button>
                     </div>
                   </form>
                 )}
@@ -372,7 +343,7 @@ const AdminTransportTab = () => {
         </div>
       </section>
 
-      {/* 📅 Timetable Upload / Preview Modal */}
+      {/* Timetable Modal */}
       {openModal && selectedBus && (
         <Dialog open={openModal} onOpenChange={setOpenModal}>
           <DialogContent>
@@ -393,17 +364,11 @@ const AdminTransportTab = () => {
                       onClick={() => window.open(imageUrl, "_blank")}
                     />
                     <div className="flex justify-center gap-3">
-                      <Button
-                        onClick={() => window.open(imageUrl, "_blank")}
-                        className="bg-blue-600 text-white flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-4 h-4" /> Open in New Tab
+                      <Button onClick={() => window.open(imageUrl, "_blank")} className="bg-blue-600 text-white">
+                        Open in New Tab
                       </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleDeleteTimetable(existing.timetable_id)}
-                      >
-                        🗑 Delete Timetable
+                      <Button variant="destructive" onClick={() => handleDeleteTimetable(existing.timetable_id)}>
+                        Delete Timetable
                       </Button>
                     </div>
                   </div>
