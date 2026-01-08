@@ -12,7 +12,8 @@ async function getAllFailures() {
   }
 
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/failures`, {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/failures`, {
       headers: {
         Cookie: `user_id=${userId.value}`,
       },

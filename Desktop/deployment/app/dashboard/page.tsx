@@ -14,7 +14,8 @@ async function getRepos() {
   }
 
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/repos`, {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/repos`, {
       headers: {
         Cookie: `user_id=${userId.value}`,
       },
@@ -42,7 +43,8 @@ async function getRecentFailures() {
   }
 
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/failures`, {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/failures`, {
       headers: {
         Cookie: `user_id=${userId.value}`,
       },
