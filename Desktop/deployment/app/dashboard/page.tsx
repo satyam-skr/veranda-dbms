@@ -4,6 +4,7 @@ import { Header } from '@/components/Header';
 import { RepoCard } from '@/components/RepoCard';
 import { FailureCard } from '@/components/FailureCard';
 import Link from 'next/link';
+import { getBaseUrl } from '@/lib/get-base-url';
 
 async function getRepos() {
   const cookieStore = await cookies();
@@ -14,7 +15,7 @@ async function getRepos() {
   }
 
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const baseUrl = await getBaseUrl();
     const response = await fetch(`${baseUrl}/api/repos`, {
       headers: {
         Cookie: `user_id=${userId.value}`,
@@ -43,7 +44,7 @@ async function getRecentFailures() {
   }
 
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const baseUrl = await getBaseUrl();
     const response = await fetch(`${baseUrl}/api/failures`, {
       headers: {
         Cookie: `user_id=${userId.value}`,

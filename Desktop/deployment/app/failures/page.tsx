@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { FailureCard } from '@/components/FailureCard';
+import { getBaseUrl } from '@/lib/get-base-url';
 
 async function getAllFailures() {
   const cookieStore = await cookies();
@@ -12,7 +13,7 @@ async function getAllFailures() {
   }
 
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
+    const baseUrl = await getBaseUrl();
     const response = await fetch(`${baseUrl}/api/failures`, {
       headers: {
         Cookie: `user_id=${userId.value}`,

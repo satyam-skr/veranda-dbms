@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code');
 
     if (!code) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=no_code`);
+      const url = new URL(request.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      return NextResponse.redirect(`${baseUrl}?error=no_code`);
     }
 
     // Exchange code for access token
@@ -30,7 +32,9 @@ export async function GET(request: NextRequest) {
 
     if (tokenData.error || !tokenData.access_token) {
       logger.error('GitHub OAuth error', { error: tokenData.error });
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=oauth_failed`);
+      const url = new URL(request.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      return NextResponse.redirect(`${baseUrl}?error=oauth_failed`);
     }
 
     const accessToken = tokenData.access_token;
@@ -81,13 +85,17 @@ export async function GET(request: NextRequest) {
 
     if (upsertError || !user) {
       logger.error('Failed to upsert user', { error: upsertError });
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=db_error`);
+      const url = new URL(request.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      return NextResponse.redirect(`${baseUrl}?error=db_error`);
     }
 
     logger.info('User authenticated', { userId: user.id, username: userData.login });
 
     // Set session cookie
-    const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
+    const url = new URL(request.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    const response = NextResponse.redirect(`${baseUrl}/dashboard`);
     response.cookies.set('user_id', user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -98,6 +106,8 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     logger.error('GitHub callback error', { error: String(error) });
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=server_error`);
+    const url = new URL(request.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    return NextResponse.redirect(`${baseUrl}?error=server_error`);
   }
 }

@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { getBaseUrl } from '@/lib/get-base-url';
 
-export default function LandingPage() {
-  const githubOAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${process.env.NEXT_PUBLIC_APP_URL}/api/auth/github-callback&scope=read:user user:email`;
+export default async function LandingPage() {
+  const baseUrl = await getBaseUrl();
+  const githubOAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${baseUrl}/api/auth/github-callback&scope=read:user user:email`;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">

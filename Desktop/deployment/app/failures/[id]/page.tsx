@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { FixAttemptCard } from '@/components/FixAttemptCard';
 import Link from 'next/link';
+import { getBaseUrl } from '@/lib/get-base-url';
 
 async function getFailureDetail(id: string) {
   const cookieStore = await cookies();
@@ -13,7 +14,8 @@ async function getFailureDetail(id: string) {
   }
 
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/failures/${id}`, {
+    const baseUrl = await getBaseUrl();
+    const response = await fetch(`${baseUrl}/api/failures/${id}`, {
       headers: {
         Cookie: `user_id=${userId.value}`,
       },
