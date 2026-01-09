@@ -57,20 +57,22 @@ export async function GET(request: NextRequest) {
     logger.info(`Monitoring ${projects.length} projects`);
 
     // Process each project
+    const results = [];
     for (const project of projects) {
       try {
-        await monitorProject(project, !!debugKey);
+        const result = await monitorProject(project, !!debugKey);
+        results.push({ projectId: project.id, ...result });
       } catch (error) {
         logger.error('Project monitoring failed', {
           projectId: project.id,
           error: String(error),
         });
-        // Continue with other projects
+        results.push({ projectId: project.id, error: String(error) });
       }
     }
 
     logger.info('=== Autonomous monitoring completed ===');
-    return NextResponse.json({ success: true, projectsMonitored: projects.length });
+    return NextResponse.json({ success: true, projectsMonitored: projects.length, results });
   } catch (error) {
     logger.error('Cron error', { error: String(error) });
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
 /**
  * Monitor a single Vercel project
  */
-async function monitorProject(project: any, forceRun = false) {
+async function monitorProject(project: any, forceRunArg = false) {
   try {
     // Decrypt Vercel token
     const vercelToken = await decryptToken(project.vercel_token);
@@ -91,18 +93,18 @@ async function monitorProject(project: any, forceRun = false) {
 
     if (deployments.length === 0) {
       logger.info('No deployments found', { projectId: project.id });
-      return;
+      return { status: 'no_deployments_found' };
     }
 
     const latestDeployment = deployments[0];
 
     // Check if we already processed this deployment (skip validation if debug key provided)
     // We treat 'debug_123' as a force-run
-    const forceRun = (project as any)._forceRun; // Passed from GET handler if needed
+    const forceRun = (project as any)._forceRun || forceRunArg; // Passed from GET handler if needed
     
     if (latestDeployment.id === project.last_checked_deployment_id && !forceRun) {
       // Already processed
-      return;
+      return { status: 'already_processed', deploymentId: latestDeployment.id };
     }
 
     logger.info('Checked deployment', {
@@ -115,13 +117,13 @@ async function monitorProject(project: any, forceRun = false) {
     if (latestDeployment.state === 'READY') {
       // Success - mark as checked since we're done with this ID
       await updateLastChecked(project.id, latestDeployment.id);
-      return;
+      return { status: 'success_deployment', deploymentId: latestDeployment.id, state: 'READY' };
     }
 
     if (latestDeployment.state === 'BUILDING' || latestDeployment.state === 'QUEUED') {
       // Still in progress - DO NOT update last_checked_deployment_id
       // We want to check this ID again on the next run
-      return;
+      return { status: 'in_progress', deploymentId: latestDeployment.id, state: latestDeployment.state };
     }
 
     if (latestDeployment.state === 'ERROR' || latestDeployment.state === 'CANCELED') {
@@ -135,7 +137,10 @@ async function monitorProject(project: any, forceRun = false) {
       await updateLastChecked(project.id, latestDeployment.id);
 
       await handleFailure(project, latestDeployment.id, vercelToken);
+      return { status: 'triggered_fix', deploymentId: latestDeployment.id, state: latestDeployment.state };
     }
+    
+    return { status: 'unknown_state', state: latestDeployment.state };
   } catch (error) {
     logger.error('Monitor project error', { projectId: project.id, error: String(error) });
     throw error;
