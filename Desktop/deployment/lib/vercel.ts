@@ -49,38 +49,66 @@ export class VercelClient {
 
   /**
    * Get deployment build logs
+   * Fetches deployment details and extracts error information
    */
   async getDeploymentLogs(deploymentId: string, projectId?: string): Promise<string> {
-    const params = new URLSearchParams();
-    if (projectId) params.append('projectId', projectId);
-    params.append('direction', 'backward');
-    
-    const response = await fetch(`${this.baseUrl}/v2/deployments/${deploymentId}/events?${params.toString()}`, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch logs: ${response.status}`);
-    }
-
-    const text = await response.text();
-    const lines = text.trim().split('\n');
-    
-    let logs = '';
-    for (const line of lines) {
-      try {
-        const event = JSON.parse(line);
-        if ((event.type === 'stdout' || event.type === 'stderr') && event.payload?.text) {
-          logs += event.payload.text + '\n';
-        }
-      } catch (e) {
-        // Skip invalid JSON lines
+    try {
+      // First, try to get the deployment object which contains error info
+      const deployment = await this.getDeployment(deploymentId);
+      
+      // Extract error information from the deployment object
+      let logs = '';
+      
+      if (deployment.readyState === 'ERROR' && deployment.errorMessage) {
+        logs += `Error: ${deployment.errorMessage}\n`;
       }
-    }
+      
+      if (deployment.errorCode) {
+        logs += `Error Code: ${deployment.errorCode}\n`;
+      }
+      
+      // Try to get build logs from events API (best effort)
+      try {
+        const params = new URLSearchParams();
+        if (projectId) params.append('projectId', projectId);
+        params.append('limit', '100');
+        
+        const response = await fetch(`${this.baseUrl}/v2/deployments/${deploymentId}/events?${params.toString()}`, {
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+          },
+        });
 
-    return logs;
+        if (response.ok) {
+          const text = await response.text();
+          const lines = text.trim().split('\n');
+          
+          for (const line of lines) {
+            try {
+              const event = JSON.parse(line);
+              if ((event.type === 'stdout' || event.type === 'stderr') && event.payload?.text) {
+                logs += event.payload.text + '\n';
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      } catch (eventsError) {
+        // Events API failed, but we continue with deployment object info
+        console.log('Events API unavailable, using deployment object only');
+      }
+      
+      // If we still have no logs, provide a generic error message
+      if (!logs || logs.trim().length === 0) {
+        logs = `Build failed for deployment ${deploymentId}. ReadyState: ${deployment.readyState}. Please check build configuration and dependencies.`;
+      }
+      
+      return logs;
+    } catch (error) {
+      // Fallback: return a generic error that allows the fix process to continue
+      return `Build failed for deployment ${deploymentId}. Error details unavailable. Common issues: missing dependencies, syntax errors, or build configuration problems.`;
+    }
   }
 
   /**
