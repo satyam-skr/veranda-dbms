@@ -136,8 +136,8 @@ async function monitorProject(project: any, forceRunArg = false) {
       // Mark as checked so we don't handle the same failure twice (unless retrying)
       await updateLastChecked(project.id, latestDeployment.id);
 
-      await handleFailure(project, latestDeployment.id, vercelToken);
-      return { status: 'triggered_fix', deploymentId: latestDeployment.id, state: latestDeployment.state };
+      const result = await handleFailure(project, latestDeployment.id, vercelToken);
+      return { status: 'triggered_fix', deploymentId: latestDeployment.id, state: latestDeployment.state, fixResult: result };
     }
     
     return { status: 'unknown_state', state: latestDeployment.state };
