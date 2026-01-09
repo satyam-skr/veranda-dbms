@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     // Process each project
     for (const project of projects) {
       try {
-        await monitorProject(project);
+        await monitorProject(project, !!debugKey);
       } catch (error) {
         logger.error('Project monitoring failed', {
           projectId: project.id,
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 /**
  * Monitor a single Vercel project
  */
-async function monitorProject(project: any) {
+async function monitorProject(project: any, forceRun = false) {
   try {
     // Decrypt Vercel token
     const vercelToken = await decryptToken(project.vercel_token);
@@ -96,20 +96,14 @@ async function monitorProject(project: any) {
 
     const latestDeployment = deployments[0];
 
-    // Check if we already processed this deployment
-    if (latestDeployment.id === project.last_checked_deployment_id) {
+    // Check if we already processed this deployment (skip validation if debug key provided)
+    // We treat 'debug_123' as a force-run
+    const forceRun = (project as any)._forceRun; // Passed from GET handler if needed
+    
+    if (latestDeployment.id === project.last_checked_deployment_id && !forceRun) {
       // Already processed
       return;
     }
-
-    // Update last checked deployment
-    await supabaseAdmin
-      .from('vercel_projects')
-      .update({
-        last_checked_deployment_id: latestDeployment.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', project.id);
 
     logger.info('Checked deployment', {
       projectId: project.id,
@@ -119,12 +113,14 @@ async function monitorProject(project: any) {
 
     // Check deployment status
     if (latestDeployment.state === 'READY') {
-      // Success - nothing to do
+      // Success - mark as checked since we're done with this ID
+      await updateLastChecked(project.id, latestDeployment.id);
       return;
     }
 
     if (latestDeployment.state === 'BUILDING' || latestDeployment.state === 'QUEUED') {
-      // Still in progress
+      // Still in progress - DO NOT update last_checked_deployment_id
+      // We want to check this ID again on the next run
       return;
     }
 
@@ -134,6 +130,9 @@ async function monitorProject(project: any) {
         projectId: project.id,
         deploymentId: latestDeployment.id,
       });
+
+      // Mark as checked so we don't handle the same failure twice (unless retrying)
+      await updateLastChecked(project.id, latestDeployment.id);
 
       await handleFailure(project, latestDeployment.id, vercelToken);
     }
@@ -359,4 +358,14 @@ async function markAsFailed(
       })),
     });
   }
+}
+
+async function updateLastChecked(projectId: string, deploymentId: string) {
+  await supabaseAdmin
+    .from('vercel_projects')
+    .update({
+      last_checked_deployment_id: deploymentId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', projectId);
 }
