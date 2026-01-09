@@ -173,15 +173,18 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
 
     if (insertError || !failureRecord) {
       logger.error('Failed to create failure record', { error: insertError });
-      return;
+      return { success: false, stage: 'insert_db', error: insertError };
     }
 
     logger.info('Created failure record', { failureRecordId: failureRecord.id });
 
     // Start autonomous fix loop
     await autonomousFixLoop(failureRecord.id, project, vercelToken);
+    
+    return { success: true, failureRecordId: failureRecord.id };
   } catch (error) {
     logger.error('Handle failure error', { error: String(error) });
+    return { success: false, stage: 'handle_failure_catch', error: String(error) };
   }
 }
 
