@@ -47,11 +47,14 @@ export class VercelClient {
     return this.request<VercelDeployment>(`/v13/deployments/${deploymentId}`);
   }
 
-  /**
    * Get deployment build logs
    */
-  async getDeploymentLogs(deploymentId: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/v13/deployments/${deploymentId}/events`, {
+  async getDeploymentLogs(deploymentId: string, projectId?: string): Promise<string> {
+    const params = new URLSearchParams();
+    if (projectId) params.append('projectId', projectId);
+    params.append('direction', 'backward');
+    
+    const response = await fetch(`${this.baseUrl}/v13/deployments/${deploymentId}/events?${params.toString()}`, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
       },

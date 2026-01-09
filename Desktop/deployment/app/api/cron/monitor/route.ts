@@ -155,7 +155,7 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
     const vercelClient = new VercelClient(vercelToken);
 
     // Fetch deployment logs
-    const logs = await vercelClient.getDeploymentLogs(deploymentId);
+    const logs = await vercelClient.getDeploymentLogs(deploymentId, project.project_id);
 
     // Create failure record
     const { data: failureRecord, error: insertError } = await supabaseAdmin
