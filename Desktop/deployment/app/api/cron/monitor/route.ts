@@ -152,6 +152,12 @@ async function monitorProject(project: any, forceRunArg = false) {
  */
 async function handleFailure(project: any, deploymentId: string, vercelToken: string) {
   try {
+    // Validate deploymentId
+    if (!deploymentId) {
+      logger.error('deploymentId is undefined or null!', { project: project.id });
+      return { success: false, stage: 'validation', error: 'deploymentId is required' };
+    }
+    
     const vercelClient = new VercelClient(vercelToken);
 
     // Fetch deployment logs
@@ -173,6 +179,8 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
 
     if (insertError || !failureRecord) {
       logger.error('Failed to create failure record', { error: insertError });
+      return { success: false, stage: 'insert_db', error: insertError };
+    }
       return { success: false, stage: 'insert_db', error: insertError };
     }
 
