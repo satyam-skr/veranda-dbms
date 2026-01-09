@@ -98,46 +98,61 @@ async function monitorProject(project: any, forceRunArg = false) {
 
     const latestDeployment = deployments[0];
 
+    // Debug: log deployment structure to understand what fields are available
+    logger.info('Latest deployment structure', {
+      projectId: project.id,
+      deploymentKeys: Object.keys(latestDeployment),
+      deploymentId: latestDeployment.id,
+      deploymentUid: (latestDeployment as any).uid,
+      deploymentState: latestDeployment.state,
+    });
+
     // Check if we already processed this deployment (skip validation if debug key provided)
     // We treat 'debug_123' as a force-run
     const forceRun = (project as any)._forceRun || forceRunArg; // Passed from GET handler if needed
     
-    if (latestDeployment.id === project.last_checked_deployment_id && !forceRun) {
+    const deploymentId = latestDeployment.id || (latestDeployment as any).uid;
+    if (!deploymentId) {
+      logger.error('No deployment ID found!', { deployment: latestDeployment });
+      return { status: 'no_deployment_id', deployment: latestDeployment };
+    }
+    
+    if (deploymentId === project.last_checked_deployment_id && !forceRun) {
       // Already processed
-      return { status: 'already_processed', deploymentId: latestDeployment.id };
+      return { status: 'already_processed', deploymentId };
     }
 
     logger.info('Checked deployment', {
       projectId: project.id,
-      deploymentId: latestDeployment.id,
+      deploymentId,
       state: latestDeployment.state,
     });
 
     // Check deployment status
     if (latestDeployment.state === 'READY') {
       // Success - mark as checked since we're done with this ID
-      await updateLastChecked(project.id, latestDeployment.id);
-      return { status: 'success_deployment', deploymentId: latestDeployment.id, state: 'READY' };
+      await updateLastChecked(project.id, deploymentId);
+      return { status: 'success_deployment', deploymentId, state: 'READY' };
     }
 
     if (latestDeployment.state === 'BUILDING' || latestDeployment.state === 'QUEUED') {
       // Still in progress - DO NOT update last_checked_deployment_id
       // We want to check this ID again on the next run
-      return { status: 'in_progress', deploymentId: latestDeployment.id, state: latestDeployment.state };
+      return { status: 'in_progress', deploymentId, state: latestDeployment.state };
     }
 
     if (latestDeployment.state === 'ERROR' || latestDeployment.state === 'CANCELED') {
       // FAILURE DETECTED - Start autonomous fix process
       logger.info('🚨 Failure detected!', {
         projectId: project.id,
-        deploymentId: latestDeployment.id,
+        deploymentId,
       });
 
       // Mark as checked so we don't handle the same failure twice (unless retrying)
-      await updateLastChecked(project.id, latestDeployment.id);
+      await updateLastChecked(project.id, deploymentId);
 
-      const result = await handleFailure(project, latestDeployment.id, vercelToken);
-      return { status: 'triggered_fix', deploymentId: latestDeployment.id, state: latestDeployment.state, fixResult: result };
+      const result = await handleFailure(project, deploymentId, vercelToken);
+      return { status: 'triggered_fix', deploymentId, state: latestDeployment.state, fixResult: result };
     }
     
     return { status: 'unknown_state', state: latestDeployment.state };
