@@ -47,6 +47,7 @@ export class VercelClient {
     return this.request<VercelDeployment>(`/v13/deployments/${deploymentId}`);
   }
 
+  /**
    * Get deployment build logs
    */
   async getDeploymentLogs(deploymentId: string, projectId?: string): Promise<string> {
