@@ -86,6 +86,9 @@ export interface VercelDeployment {
   url: string;
   name: string;
   state: 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED' | 'QUEUED';
+  readyState?: string;
+  errorMessage?: string;
+  errorCode?: string;
   created: number;
   target?: string;
   gitSource?: {
