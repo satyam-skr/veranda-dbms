@@ -11,11 +11,15 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(5);
 
-    if (error) {
-      return NextResponse.json({ error }, { status: 500 });
+    const { data: projects, error: projectsError } = await supabaseAdmin
+      .from('vercel_projects')
+      .select('*');
+
+    if (error || projectsError) {
+      return NextResponse.json({ error: error || projectsError }, { status: 500 });
     }
 
-    return NextResponse.json({ failures });
+    return NextResponse.json({ failures, projects });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
