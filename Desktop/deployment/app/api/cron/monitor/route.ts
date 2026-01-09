@@ -181,8 +181,6 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
       logger.error('Failed to create failure record', { error: insertError });
       return { success: false, stage: 'insert_db', error: insertError };
     }
-      return { success: false, stage: 'insert_db', error: insertError };
-    }
 
     logger.info('Created failure record', { failureRecordId: failureRecord.id });
 
