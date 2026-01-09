@@ -55,7 +55,7 @@ export class VercelClient {
     if (projectId) params.append('projectId', projectId);
     params.append('direction', 'backward');
     
-    const response = await fetch(`${this.baseUrl}/v13/deployments/${deploymentId}/events?${params.toString()}`, {
+    const response = await fetch(`${this.baseUrl}/v2/deployments/${deploymentId}/events?${params.toString()}`, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
       },
