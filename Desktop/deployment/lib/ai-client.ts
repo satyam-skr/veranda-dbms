@@ -6,7 +6,7 @@
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY!;
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
 
-export const PERPLEXITY_MODEL = 'llama-3.1-sonar-small-128k-online'; // Free tier model
+export const PERPLEXITY_MODEL = 'sonar'; // Free tier basic model
 
 export interface PerplexityMessage {
   role: 'system' | 'user' | 'assistant';
