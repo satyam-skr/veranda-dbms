@@ -20,9 +20,11 @@ export async function GET(request: Request) {
     // Try a simple test call to Perplexity
     const testPrompt = 'Say "API is working" if you can read this.';
     
-    const response = await callPerplexity([
-      { role: 'user', content: testPrompt }
-    ]);
+    const response = await callPerplexity({
+      messages: [
+        { role: 'user', content: testPrompt }
+      ]
+    });
 
     return NextResponse.json({
       success: true,
