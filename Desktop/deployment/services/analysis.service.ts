@@ -33,7 +33,7 @@ export class AnalysisService {
       logger.info('📥 [AnalysisService] Failure record fetch result:', { hasRecord: !!failureRecord, hasError: !!fetchError });
 
       if (fetchError || !failureRecord) {
-        logger.error('❌ [AnalysisService] Failed to fetch failure record:', fetchError);
+        logger.error('❌ [AnalysisService] Failed to fetch failure record:', { error: fetchError });
         logger.error('Failed to fetch failure record', { failureRecordId, error: fetchError });
         return null;
       }
@@ -77,7 +77,7 @@ export class AnalysisService {
       // Construct AI prompt
       logger.info('📝 [AnalysisService] Constructing AI prompt...');
       const prompt = this.constructPrompt(failureRecord.logs, fileContents);
-      logger.info('✅ [AnalysisService] Prompt constructed, length:', prompt.length);
+      logger.info('✅ [AnalysisService] Prompt constructed, length:', { length: prompt.length });
 
       // Call Perplexity API with retry
       logger.info('🤖 [AnalysisService] Calling Perplexity API (with retry)...');
