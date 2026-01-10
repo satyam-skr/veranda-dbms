@@ -13,9 +13,11 @@ export class AnalysisService {
    */
   async analyzeFailureAndGenerateFix(failureRecordId: string): Promise<AIFixResponse | null> {
     try {
+      console.log('🔍 [AnalysisService] Starting AI analysis', { failureRecordId });
       logger.info('Starting AI analysis', { failureRecordId });
 
       // Fetch failure record with related data
+      console.log('📋 [AnalysisService] Fetching failure record from database...');
       const { data: failureRecord, error: fetchError } = await supabaseAdmin
         .from('failure_records')
         .select(`
@@ -28,7 +30,10 @@ export class AnalysisService {
         .eq('id', failureRecordId)
         .single();
 
+      console.log('📥 [AnalysisService] Failure record fetch result:', { hasRecord: !!failureRecord, hasError: !!fetchError });
+
       if (fetchError || !failureRecord) {
+        console.error('❌ [AnalysisService] Failed to fetch failure record:', fetchError);
         logger.error('Failed to fetch failure record', { failureRecordId, error: fetchError });
         return null;
       }
@@ -47,30 +52,42 @@ export class AnalysisService {
         ? await decryptToken(installation.installation_token)
         : null;
 
+      console.log('🔐 [AnalysisService] Token decrypt result:', { hasToken: !!installationToken });
+
       if (!installationToken) {
+        console.error('❌ [AnalysisService] No installation token available');
         logger.error('No installation token available', { installationId: installation.id });
         return null;
       }
 
       // Create GitHub client
+      console.log('🐙 [AnalysisService] Creating GitHub client...');
       const octokit = await createInstallationClient(installation.installation_id);
+      console.log('✅ [AnalysisService] GitHub client created');
 
       // Fetch repository files
+      console.log('📂 [AnalysisService] Fetching repository files...');
       const fileContents = await this.fetchRepositoryFiles(
         octokit,
         installation.repo_owner,
         installation.repo_name
       );
+      console.log('📥 [AnalysisService] Files fetched:', { count: Object.keys(fileContents).length });
 
       // Construct AI prompt
+      console.log('📝 [AnalysisService] Constructing AI prompt...');
       const prompt = this.constructPrompt(failureRecord.logs, fileContents);
+      console.log('✅ [AnalysisService] Prompt constructed, length:', prompt.length);
 
       // Call Perplexity API with retry
+      console.log('🤖 [AnalysisService] Calling Perplexity API (with retry)...');
       const aiResponse = await retryWithBackoff(async () => {
         return await this.callPerplexityAPI(prompt);
       }, 3, 2000);
+      console.log('📥 [AnalysisService] Perplexity response:', { hasResponse: !!aiResponse, filesCount: aiResponse?.filesToChange?.length });
 
       if (!aiResponse) {
+        console.error('❌ [AnalysisService] Perplexity API returned no response');
         logger.error('Perplexity API returned no response', { failureRecordId });
         return null;
       }
@@ -95,9 +112,11 @@ export class AnalysisService {
         return null;
       }
 
+      console.log('✅ [AnalysisService] AI analysis completed successfully');
       logger.info('AI analysis completed successfully', { failureRecordId });
       return aiResponse;
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ [AnalysisService] CRASHED:', { failureRecordId, error: error.message, stack: error.stack });
       logger.error('Analysis failed', { failureRecordId, error: String(error) });
       return null;
     }

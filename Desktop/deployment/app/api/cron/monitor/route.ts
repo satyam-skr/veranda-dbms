@@ -217,6 +217,53 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
   const MAX_RETRIES = 5;
   let currentFailureId = failureRecordId;
 
+  try {
+    console.log('🔄 [AutoFix] Starting autonomous fix loop', { 
+      failureRecordId, 
+      projectId: project.id,
+      projectName: project.project_name 
+    });
+
+    // CRITICAL: Validate environment variables FIRST
+    const perplexityKey = process.env.PERPLEXITY_API_KEY;
+    const githubToken = project.github_installations?.access_token;
+    
+    console.log('🔍 [AutoFix] Environment validation:', {
+      hasPerplexityKey: !!perplexityKey,
+      perplexityKeyLength: perplexityKey?.length,
+      hasGithubToken: !!githubToken,
+      githubTokenLength: githubToken?.length,
+      hasVercelToken: !!vercelToken,
+      vercelTokenLength: vercelToken?.length,
+      projectStructure: {
+        hasGithubInstallations: !!project.github_installations,
+        repoOwner: project.github_installations?.repo_owner,
+        repoName: project.github_installations?.repo_name,
+      }
+    });
+
+    if (!perplexityKey) {
+      throw new Error('CRITICAL: PERPLEXITY_API_KEY is missing from environment variables');
+    }
+    if (!githubToken) {
+      throw new Error('CRITICAL: GitHub access token is missing from project.github_installations');
+    }
+    if (!vercelToken) {
+      throw new Error('CRITICAL: Vercel token is missing');
+    }
+
+    console.log('✅ [AutoFix] All environment variables validated');
+
+  } catch (envError: any) {
+    console.error('❌ [AutoFix] ENVIRONMENT VALIDATION FAILED:', {
+      failureRecordId,
+      errorMessage: envError.message,
+      errorStack: envError.stack,
+    });
+    await markAsFailed(currentFailureId, project.users?.email, 0);
+    return;
+  }
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       logger.info(`🤖 Starting autonomous fix attempt ${attempt}/${MAX_RETRIES}`, {
@@ -224,10 +271,21 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
       });
 
       // PHASE 3: AI Analysis
+      console.log(`📊 [AutoFix] PHASE 3: Starting AI analysis (attempt ${attempt})`);
       const analysisService = new AnalysisService();
+      console.log('🔧 [AutoFix] AnalysisService instantiated, calling analyzeFailureAndGenerateFix...');
+      
       const aiResponse = await analysisService.analyzeFailureAndGenerateFix(currentFailureId);
+      
+      console.log('📥 [AutoFix] AI analysis returned:', {
+        hasResponse: !!aiResponse,
+        responseType: typeof aiResponse,
+        filesCount: aiResponse?.filesToChange?.length,
+        rootCause: aiResponse?.rootCause?.substring(0, 100),
+      });
 
       if (!aiResponse) {
+        console.error('❌ [AutoFix] AI analysis returned null/undefined');
         logger.error('AI analysis failed', { failureRecordId: currentFailureId });
         await markAsFailed(currentFailureId, project.users.email, attempt);
         return;
@@ -239,14 +297,24 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
       });
 
       // PHASE 4: Apply Fix
+      console.log(`🔨 [AutoFix] PHASE 4: Applying fix to GitHub (attempt ${attempt})`);
       const fixService = new FixService();
+      console.log('🔧 [AutoFix] FixService instantiated, calling applyFixAndCommit...');
+      
       const fixResult = await fixService.applyFixAndCommit(
         currentFailureId,
         aiResponse,
         'AI analysis prompt' // You can store the actual prompt if needed
       );
 
+      console.log('📥 [AutoFix] Fix application result:', {
+        hasResult: !!fixResult,
+        branchName: fixResult?.branchName,
+        fixAttemptId: fixResult?.fixAttemptId,
+      });
+
       if (!fixResult) {
+        console.error('❌ [AutoFix] Fix application returned null');
         logger.error('Fix application failed', { failureRecordId: currentFailureId });
         await markAsFailed(currentFailureId, project.users.email, attempt);
         return;
@@ -255,14 +323,23 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
       logger.info('✅ Fix applied to GitHub', { branch: fixResult.branchName });
 
       // PHASE 5: Trigger Deployment
+      console.log(`🚀 [AutoFix] PHASE 5: Triggering deployment (attempt ${attempt})`);
       const deploymentService = new DeploymentService();
+      console.log('🔧 [AutoFix] DeploymentService instantiated, calling triggerDeployment...');
+      
       const newDeploymentId = await deploymentService.triggerDeployment(
         project.id,
         fixResult.branchName,
         fixResult.fixAttemptId
       );
 
+      console.log('📥 [AutoFix] Deployment trigger result:', {
+        newDeploymentId,
+        hasDeploymentId: !!newDeploymentId,
+      });
+
       if (!newDeploymentId) {
+        console.error('❌ [AutoFix] Deployment trigger returned null');
         logger.error('Deployment trigger failed', { failureRecordId: currentFailureId });
         await markAsFailed(currentFailureId, project.users.email, attempt);
         return;
@@ -271,15 +348,22 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
       logger.info('✅ Deployment triggered', { deploymentId: newDeploymentId });
 
       // PHASE 6: Poll Deployment Status
+      console.log(`⏳ [AutoFix] PHASE 6: Polling deployment status (attempt ${attempt})`);
       const pollResult = await deploymentService.pollDeploymentStatus(
         newDeploymentId,
         vercelToken,
         fixResult.fixAttemptId
       );
 
+      console.log('📥 [AutoFix] Poll result:', {
+        status: pollResult.status,
+        hasLogs: !!pollResult.logs,
+      });
+
       // PHASE 7: Decision Loop
       if (pollResult.status === 'success') {
         // 🎉 SUCCESS!
+        console.log(`🎉 [AutoFix] SUCCESS! Deployment fixed on attempt ${attempt}`);
         logger.info('🎉 Deployment fixed successfully!', {
           failureRecordId: currentFailureId,
           attempt,
@@ -304,6 +388,7 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
         return; // Job done!
       } else if (pollResult.status === 'failed' && attempt < MAX_RETRIES) {
         // Failed but we have retries left - create new failure record and retry
+        console.log(`⚠️ [AutoFix] Fix failed, retrying... (attempt ${attempt}/${MAX_RETRIES})`);
         logger.info('⚠️ Fix did not work, retrying...', { attempt, retriesLeft: MAX_RETRIES - attempt });
 
         const { data: newFailure } = await supabaseAdmin
@@ -323,17 +408,27 @@ async function autonomousFixLoop(failureRecordId: string, project: any, vercelTo
           currentFailureId = newFailure.id;
           // Continue to next iteration
         } else {
+          console.error('❌ [AutoFix] Failed to create retry failure record');
           logger.error('Failed to create retry failure record');
           await markAsFailed(currentFailureId, project.users.email, attempt);
           return;
         }
       } else {
         // Failed and no retries left
+        console.error(`❌ [AutoFix] Max retries exhausted after ${attempt} attempts`);
         logger.error('❌ Max retries exhausted', { attempt });
         await markAsFailed(currentFailureId, project.users.email, attempt, aiResponse);
         return;
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`❌ [AutoFix] LOOP CRASHED at attempt ${attempt}:`, {
+        failureRecordId: currentFailureId,
+        attempt,
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        errorCode: error.code,
+      });
       logger.error('Autonomous fix loop error', { attempt, error: String(error) });
       await markAsFailed(currentFailureId, project.users.email, attempt);
       return;
