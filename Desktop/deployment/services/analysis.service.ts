@@ -38,14 +38,55 @@ export class AnalysisService {
         return null;
       }
 
+      // CRITICAL: Null-safety checks for nested relations
+      logger.info('🔍 [AnalysisService] Validating failure record structure:', {
+        hasFailureRecord: !!failureRecord,
+        hasVercelProject: !!failureRecord.vercel_projects,
+        hasGithubInstallation: !!failureRecord.vercel_projects?.github_installations,
+        projectName: failureRecord.vercel_projects?.project_name,
+        repoOwner: failureRecord.vercel_projects?.github_installations?.repo_owner,
+        repoName: failureRecord.vercel_projects?.github_installations?.repo_name,
+        installationId: failureRecord.vercel_projects?.github_installations?.installation_id,
+      });
+
+      if (!failureRecord.vercel_projects) {
+        logger.error('❌ [AnalysisService] BLOCKER: No vercel_projects relation found!', {
+          failureRecordId,
+          failureRecordKeys: Object.keys(failureRecord),
+        });
+        throw new Error('Failure record missing vercel_projects relation - database join failed');
+      }
+
+      const vercelProject = failureRecord.vercel_projects;
+
+      if (!vercelProject.github_installations) {
+        logger.error('❌ [AnalysisService] BLOCKER: No github_installations relation found!', {
+          projectId: vercelProject.id,
+          projectName: vercelProject.project_name,
+          githubInstallationId: vercelProject.github_installation_id,
+          vercelProjectKeys: Object.keys(vercelProject),
+        });
+        throw new Error('Vercel project missing github_installations relation - foreign key broken or not joined');
+      }
+
+      const installation = vercelProject.github_installations;
+
+      if (!installation.access_token && !installation.installation_token) {
+        logger.error('❌ [AnalysisService] BLOCKER: No GitHub tokens found!', {
+          installationId: installation.id,
+          hasAccessToken: !!installation.access_token,
+          hasInstallationToken: !!installation.installation_token,
+        });
+        throw new Error('GitHub installation missing tokens - re-authentication required');
+      }
+
+      logger.info('✅ [AnalysisService] All relations validated successfully');
+
       // Update status to fixing
       await supabaseAdmin
         .from('failure_records')
         .update({ status: 'fixing', updated_at: new Date().toISOString() })
         .eq('id', failureRecordId);
-
-      const vercelProject = failureRecord.vercel_projects;
-      const installation = vercelProject.github_installations;
 
       // Decrypt installation token
       const installationToken = installation.installation_token
