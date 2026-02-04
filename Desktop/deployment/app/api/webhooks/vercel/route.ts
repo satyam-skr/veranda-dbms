@@ -6,11 +6,11 @@ import { VercelClient } from '@/lib/vercel';
 import { autonomousFixLoop } from '@/lib/autofix';
 
 export async function POST(req: NextRequest) {
-  console.log('🔔 WEBHOOK RECEIVED AT:', new Date().toISOString());
+  console.log('🔔 WEBHOOK RECEIVED AT:', new Date().toString());
   
   try {
     const body = await req.json();
-    console.log('📦 Webhook payload:', JSON.stringify(body, null, 2));
+    console.log('📦 RAW webhook body:', JSON.stringify(body, null, 2));
     console.log('✅ Payload parsed');
     
     console.log('🔍 Checking event type...');
@@ -20,14 +20,16 @@ export async function POST(req: NextRequest) {
     const payload = body.payload;
     const deployment = payload?.deployment;
     const projectId = payload?.projectId || deployment?.projectId;
+    const deploymentId = deployment?.id;
+    const state = deployment?.state;
     
-    console.log('📊 Deployment State:', deployment?.state);
+    console.log('🔍 Extracted data:', { projectId, deploymentId, state, eventType });
     
     // Check if this is a failure event
     const isFailed = eventType === 'deployment.error' || 
                      eventType === 'deployment.failed' || 
-                     deployment?.state === 'ERROR' ||
-                     deployment?.state === 'FAILED';
+                     state === 'ERROR' ||
+                     state === 'FAILED';
     
     if (isFailed) {
       console.log('✅ FAILURE DETECTED - Preparing to trigger AutoFix');
