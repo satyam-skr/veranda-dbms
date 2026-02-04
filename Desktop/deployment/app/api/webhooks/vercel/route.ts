@@ -5,12 +5,15 @@ import { decryptToken } from '@/lib/encryption';
 import { VercelClient } from '@/lib/vercel';
 import { autonomousFixLoop } from '@/lib/autofix';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   console.log('🔔 WEBHOOK RECEIVED AT:', new Date().toString());
   
   try {
-    const body = await req.json();
-    console.log('📦 RAW webhook body:', JSON.stringify(body, null, 2));
+    const rawBody = await request.text();
+    console.log("📦 RAW WEBHOOK:", rawBody);
+    
+    const body = JSON.parse(rawBody);
+    console.log("🔍 PARSED:", JSON.stringify(body, null, 2));
     console.log('✅ Payload parsed');
     
     console.log('🔍 Checking event type...');

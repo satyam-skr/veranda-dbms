@@ -221,19 +221,24 @@ async function monitorProject(project: any, forceRunArg = false) {
  * Handle deployment failure - orchestrate the autonomous fix process
  */
 async function handleFailure(project: any, deploymentId: string, vercelToken: string) {
+  console.log(`🚀 [Monitor] Handling failure for project: ${project.project_name}, deployment: ${deploymentId}`);
   try {
     // Validate deploymentId
     if (!deploymentId) {
-      logger.error('deploymentId is undefined or null!', { project: project.id });
+      console.error('❌ deploymentId is missing');
       return { success: false, stage: 'validation', error: 'deploymentId is required' };
     }
     
+    console.log('📡 Step 1: Initializing VercelClient...');
     const vercelClient = new VercelClient(vercelToken);
 
     // Fetch deployment logs
+    console.log('📡 Step 2: Fetching logs from Vercel...');
     const logs = await vercelClient.getDeploymentLogs(deploymentId, project.project_id);
+    console.log('✅ logs fetched successfully');
 
     // Create failure record
+    console.log('📡 Step 3: Inserting failure record into Supabase...');
     const { data: failureRecord, error: insertError } = await supabaseAdmin
       .from('failure_records')
       .insert({
@@ -248,18 +253,20 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
       .single();
 
     if (insertError || !failureRecord) {
-      logger.error('Failed to create failure record', { error: insertError });
+      console.error('❌ Step 3: Failed to create failure record', insertError);
       return { success: false, stage: 'insert_db', error: insertError };
     }
 
-    logger.info('Created failure record', { failureRecordId: failureRecord.id });
+    console.log('✅ Step 3: failure record created:', failureRecord.id);
 
     // Start autonomous fix loop (pass logs for unfixable error notifications)
-    console.log("🔥 About to call autonomousFixLoop for failure:", failureRecord.id);
+    console.log("🔥 Step 4: Calling autonomousFixLoop...");
     await autonomousFixLoop(failureRecord.id, project, vercelToken, logs);
+    console.log("✅ Step 4: autonomousFixLoop call returned");
     
     return { success: true, failureRecordId: failureRecord.id };
   } catch (error) {
+    console.error('❌ Handle failure error CATCH:', error);
     logger.error('Handle failure error', { error: String(error) });
     return { success: false, stage: 'handle_failure_catch', error: String(error) };
   }
