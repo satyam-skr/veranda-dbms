@@ -154,4 +154,23 @@ export class VercelClient {
       body: JSON.stringify(params),
     });
   }
+
+  /**
+   * Create a webhook for the project
+   */
+  async createWebhook(projectId: string, url: string): Promise<any> {
+    return this.request('/v1/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({
+        url,
+        events: [
+          'deployment.created',
+          'deployment.error',
+          'deployment.succeeded',
+          'deployment.canceled'
+        ],
+        projectIds: [projectId],
+      }),
+    });
+  }
 }

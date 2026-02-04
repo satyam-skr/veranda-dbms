@@ -82,6 +82,23 @@ export async function POST(request: NextRequest) {
       projectName: projectData.name,
     });
 
+    // 🕸️ Register Vercel Webhook for instant failure detection
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autofix-platform.vercel.app';
+      const webhookUrl = `${appUrl}/api/webhooks/vercel`;
+      
+      logger.info('Registering Vercel webhook...', { webhookUrl });
+      await vercelClient.createWebhook(projectId, webhookUrl);
+      logger.info('Vercel webhook registered successfully');
+    } catch (webhookRegError) {
+      // Log but don't fail the whole connection if webhook registration fails
+      logger.error('Failed to register Vercel webhook', { 
+        error: String(webhookRegError),
+        projectId 
+      });
+      console.error('⚠️  Webhook registration failed (continuing):', String(webhookRegError));
+    }
+
     // ✨ NEW: Write AI comment to random file (non-blocking)
     try {
       const commentWriter = new CommentWriterService();
