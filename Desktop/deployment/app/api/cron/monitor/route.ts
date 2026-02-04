@@ -9,6 +9,7 @@ import { ErrorClassifier } from '@/services/error-classifier';
 import { sendSuccessEmail, sendFailureEmail } from '@/lib/notifications';
 import { logger } from '@/utils/logger';
 import { isAutoFixEnabled, isAutoFixDeployment, getSkipReasonMessage } from '@/lib/autofix-config';
+import { autonomousFixLoop } from '@/lib/autofix';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max (cron timeout)
@@ -254,6 +255,7 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
     logger.info('Created failure record', { failureRecordId: failureRecord.id });
 
     // Start autonomous fix loop (pass logs for unfixable error notifications)
+    console.log("🔥 About to call autonomousFixLoop for failure:", failureRecord.id);
     await autonomousFixLoop(failureRecord.id, project, vercelToken, logs);
     
     return { success: true, failureRecordId: failureRecord.id };
@@ -262,18 +264,6 @@ async function handleFailure(project: any, deploymentId: string, vercelToken: st
     return { success: false, stage: 'handle_failure_catch', error: String(error) };
   }
 }
-
-// ... existing imports
-import { autonomousFixLoop } from '@/lib/autofix';
-
-// ... (keep GET and monitorProject functions)
-
-// ... (keep handleFailure function calling autonomousFixLoop)
-
-// DELETE the local definition of autonomousFixLoop and markAsFailed and updateLastChecked if needed. 
-// Wait, updateLastChecked is used by monitorProject too. unique.
-// autonomousFixLoop and markAsFailed are now in lib/autofix.ts.
-// We need to delete them from here to avoid duplication/confusion.
 
 async function updateLastChecked(projectId: string, deploymentId: string) {
   await supabaseAdmin
