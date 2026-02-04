@@ -6,23 +6,21 @@ import { VercelClient } from '@/lib/vercel';
 import { autonomousFixLoop } from '@/lib/autofix';
 
 export async function POST(req: NextRequest) {
-  const timestamp = new Date().toISOString();
-  
-  console.log('\n' + '═'.repeat(80));
-  console.log(`🔔 [${timestamp}] WEBHOOK RECEIVED`);
-  console.log('═'.repeat(80));
+  console.log('🔔 WEBHOOK RECEIVED AT:', new Date().toISOString());
   
   try {
     const body = await req.json();
+    console.log('📦 Webhook payload:', JSON.stringify(body, null, 2));
+    console.log('✅ Payload parsed');
     
-    // Vercel webhooks for deployment.status_changed
+    console.log('🔍 Checking event type...');
     const eventType = body.type;
+    console.log(`⚠️ Event type is: ${eventType}`);
+
     const payload = body.payload;
     const deployment = payload?.deployment;
     const projectId = payload?.projectId || deployment?.projectId;
     
-    console.log('📦 Webhook Body:', JSON.stringify(body, null, 2));
-    console.log('🏷️  Event Type:', eventType);
     console.log('📊 Deployment State:', deployment?.state);
     
     // Check if this is a failure event
@@ -32,15 +30,16 @@ export async function POST(req: NextRequest) {
                      deployment?.state === 'FAILED';
     
     if (isFailed) {
-      console.log('✅ FAILURE DETECTED - Triggering AutoFix');
+      console.log('✅ FAILURE DETECTED - Preparing to trigger AutoFix');
       const deploymentId = deployment?.id;
       
       if (!projectId || !deploymentId) {
         console.error('❌ Missing Project ID or Deployment ID in webhook');
-        return NextResponse.json({ success: false, error: 'Missing data' });
+        return NextResponse.json({ success: true, error: 'Missing data logged' });
       }
 
       // 1. Find the project in our database
+      console.log(`Searching for project: ${projectId}`);
       const { data: project, error: projectError } = await supabaseAdmin
         .from('vercel_projects')
         .select(`
@@ -52,7 +51,7 @@ export async function POST(req: NextRequest) {
 
       if (projectError || !project) {
         console.error('❌ Project not found in database:', projectId);
-        return NextResponse.json({ success: false, error: 'Project not found' });
+        return NextResponse.json({ success: true, error: 'Project not found logged' });
       }
 
       // 2. Check if AutoFix is already in progress
@@ -62,11 +61,13 @@ export async function POST(req: NextRequest) {
       }
 
       // 3. Decrypt token and fetch logs
+      console.log('Fetching build logs...');
       const vercelToken = await decryptToken(project.vercel_token);
       const vercelClient = new VercelClient(vercelToken);
       const logs = await vercelClient.getDeploymentLogs(deploymentId, projectId);
 
       // 4. Create failure record
+      console.log('Creating failure record in Supabase...');
       const { data: failureRecord, error: insertError } = await supabaseAdmin
         .from('failure_records')
         .insert({
@@ -82,16 +83,17 @@ export async function POST(req: NextRequest) {
 
       if (insertError) {
         console.error('❌ Failed to create failure record:', insertError);
-        return NextResponse.json({ success: false, error: 'Database error' });
+        return NextResponse.json({ success: true, error: 'Database error logged' });
       }
 
       // 5. Trigger the fix loop (non-blocking)
-      console.log('🚀 Launching Autonomous Fix Loop...');
+      console.log('🚀 Triggering autonomousFixLoop');
       autonomousFixLoop(failureRecord.id, project, vercelToken, logs).catch(err => {
-        console.error('❌ AutoFix Loop failed:', err);
+        console.error('❌ Webhook error (async loop):', err);
         logger.error('AutoFix loop unhandled error', { error: String(err) });
       });
 
+      console.log('🏁 Webhook handler completed successfully');
       return NextResponse.json({ 
         success: true, 
         message: 'Fix loop triggered',
@@ -99,14 +101,13 @@ export async function POST(req: NextRequest) {
       });
 
     } else {
-      console.log('⏭️  Not a failure - skipping AutoFix');
+      console.log(`⏭️ Not a failure (state: ${deployment?.state}) - skipping AutoFix`);
     }
     
   } catch (error) {
-    console.error('❌ Webhook processing error:', error);
+    console.error('❌ Webhook error:', error);
     logger.error('Webhook error', { error: String(error) });
   }
   
-  console.log('═'.repeat(80) + '\n');
   return NextResponse.json({ success: true });
 }
