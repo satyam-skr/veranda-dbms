@@ -4,27 +4,34 @@ import { decryptToken } from '../lib/encryption';
 import { createInstallationClient } from '../lib/github';
 import { logger } from '../utils/logger';
 import { AIFixResponse } from '../lib/types';
+import { FixValidator } from './fix-validator.service';
+import { SyntaxChecker } from './syntax-checker.service';
 
 export class FixService {
-  /**
-   * Apply AI-generated fix and commit to GitHub
-   */
   async applyFixAndCommit(
     failureRecordId: string,
     aiResponse: AIFixResponse,
     aiPromptSent: string
   ): Promise<{ branchName: string; fixAttemptId: string } | null> {
+    console.log('\n' + '📤'.repeat(40));
+    console.log('📤 [Fix] APPLYING FIX TO GITHUB');
+    console.log('📤'.repeat(40));
+    
     try {
       logger.info('Applying fix', { failureRecordId });
 
-      // Fetch failure record with related data
       const { data: failureRecord, error } = await supabaseAdmin
         .from('failure_records')
         .select(`
           *,
-          vercel_projects (
-            *,
-            github_installations (*)
+          vercel_projects!inner (
+            id,
+            github_installations!inner (
+              repo_owner,
+              repo_name,
+              installation_token,
+              installation_id
+            )
           )
         `)
         .eq('id', failureRecordId)
@@ -35,119 +42,148 @@ export class FixService {
         return null;
       }
 
-      const vercelProject = failureRecord.vercel_projects;
-      const installation = vercelProject.github_installations;
+      const installation =
+        failureRecord.vercel_projects.github_installations;
 
-      // Decrypt installation token
-      const installationToken = installation.installation_token
-        ? await decryptToken(installation.installation_token)
-        : null;
+      const token = await decryptToken(
+        installation.installation_token
+      );
 
-      if (!installationToken) {
-        logger.error('No installation token', { installationId: installation.id });
+      if (!token) {
+        logger.error('No installation token');
         return null;
       }
 
-      // Create GitHub client
-      const octokit = await createInstallationClient(installation.installation_id);
+      const octokit = await createInstallationClient(
+        installation.installation_id
+      );
 
-      // Generate unique branch name
-      const timestamp = Date.now();
-      const randomId = nanoid(6);
-      const branchName = `autofix/attempt-${timestamp}-${randomId}`;
-
-      // Get default branch
-      const { data: repoData } = await octokit.rest.repos.get({
+      const { data: repo } = await octokit.rest.repos.get({
         owner: installation.repo_owner,
         repo: installation.repo_name,
       });
 
-      const defaultBranch = repoData.default_branch || 'main';
+      const defaultBranch = repo.default_branch ?? 'main';
 
-      // Get latest commit SHA on default branch
-      const { data: branchData } = await octokit.rest.repos.getBranch({
-        owner: installation.repo_owner,
-        repo: installation.repo_name,
-        branch: defaultBranch,
-      });
+      const { data: branchData } =
+        await octokit.rest.repos.getBranch({
+          owner: installation.repo_owner,
+          repo: installation.repo_name,
+          branch: defaultBranch,
+        });
 
-      const latestCommitSha = branchData.commit.sha;
+      const branchName = `autofix/attempt-${Date.now()}-${nanoid(6)}`;
 
-      // Create new branch
       await octokit.rest.git.createRef({
         owner: installation.repo_owner,
         repo: installation.repo_name,
         ref: `refs/heads/${branchName}`,
-        sha: latestCommitSha,
+        sha: branchData.commit.sha,
       });
 
+      console.log(`🌿 [Fix] Branch created: ${branchName}`);
       logger.info('Created branch', { branchName });
 
-      // Apply file changes
+      let didChangeAnything = false;
+
       for (const file of aiResponse.filesToChange) {
+        let currentContent = '';
+        let currentSha: string | undefined;
+
         try {
-          // Fetch current file content
-          let currentSha: string | undefined;
-          let currentContent = '';
-
-          try {
-            const { data: fileData } = await octokit.rest.repos.getContent({
-              owner: installation.repo_owner,
-              repo: installation.repo_name,
-              path: file.filename,
-              ref: defaultBranch,
-            });
-
-            if ('content' in fileData) {
-              currentContent = Buffer.from(fileData.content, 'base64').toString('utf-8');
-              currentSha = fileData.sha;
-            }
-          } catch (e) {
-            // File doesn't exist, will create new
-          }
-
-          // Apply changes
-          let newContent: string;
-          if (file.oldCode && currentContent) {
-            // Replace old code with new code
-            newContent = currentContent.replace(file.oldCode, file.newCode);
-            
-            // If replacement didn't work, log warning but use new code
-            if (newContent === currentContent && file.oldCode !== file.newCode) {
-              logger.warn('Old code not found in file, using new code as-is', { filename: file.filename });
-              newContent = file.newCode;
-            }
-          } else {
-            // Use new code directly
-            newContent = file.newCode;
-          }
-
-          // Encode to base64
-          const encodedContent = Buffer.from(newContent).toString('base64');
-
-          // Commit file change
-          await octokit.rest.repos.createOrUpdateFileContents({
+          const { data } = await octokit.rest.repos.getContent({
             owner: installation.repo_owner,
             repo: installation.repo_name,
             path: file.filename,
-            message: `fix: AutoFix applied AI-generated fix for: ${aiResponse.rootCause} (Attempt ${failureRecord.attempt_count + 1})`,
-            content: encodedContent,
-            branch: branchName,
-            sha: currentSha,
+            ref: branchName,
           });
 
-          logger.info('Updated file', { filename: file.filename, branchName });
-        } catch (fileError) {
-          logger.error('Failed to update file', {
-            filename: file.filename,
-            error: String(fileError),
-          });
-          throw fileError;
+          if ('content' in data) {
+            currentContent = Buffer.from(
+              data.content,
+              'base64'
+            ).toString('utf-8');
+            currentSha = data.sha;
+          }
+        } catch {
+          // file does not exist
         }
+
+        const newContent = file.oldCode
+          ? currentContent.replace(file.oldCode, file.newCode)
+          : file.newCode;
+
+        if (currentContent.trim() !== newContent.trim()) {
+          didChangeAnything = true;
+        }
+
+        const validation = await FixValidator.validateFix(
+          file.filename,
+          '',
+          newContent,
+          '',
+          currentContent,
+          async () => true
+        );
+
+        if (!validation.isValid) {
+          logger.error('[Fix] Validation failed during apply', {
+            file: file.filename,
+            reason: validation.reason,
+            details: validation.details,
+            errors: validation.errors,
+            failureRecordId,
+          });
+          return null;
+        }
+
+        // 🧪 SAFEGUARD #4: PRE-PUSH SYNTAX CHECK
+        logger.info('🧪 [Fix] Running pre-push syntax check...', { filename: file.filename });
+        const syntaxCheck = await SyntaxChecker.validateJavaScript(
+          newContent,
+          file.filename
+        );
+
+        if (!syntaxCheck.valid) {
+          logger.error('❌ [Fix] Syntax check FAILED - not pushing to GitHub', {
+            errors: syntaxCheck.errors,
+            filename: file.filename,
+            failureRecordId
+          });
+          // DON'T return null - instead, tell AI to try again with the syntax error
+          // (Actually in this structure, returning null triggers a retry in autofix.ts loop)
+          return null;
+        }
+
+        logger.info('✅ [Fix] Syntax check passed', { filename: file.filename });
+
+        await octokit.rest.repos.createOrUpdateFileContents({
+          owner: installation.repo_owner,
+          repo: installation.repo_name,
+          path: file.filename,
+          branch: branchName,
+          message: `[AutoFix] ${aiResponse.rootCause || 'Applied build fix'}`,
+          content: Buffer.from(newContent).toString('base64'),
+          ...(currentSha ? { sha: currentSha } : {}),
+        });
+
+        console.log(`✅ [Fix] Updated file: ${file.filename}`);
+        logger.info('Updated file', { filename: file.filename });
       }
 
-      // Insert fix attempt record
-      const { data: fixAttempt, error: insertError } = await supabaseAdmin
+      // 🔴 HARD STOP: NO DIFF = NO SUCCESS
+      if (!didChangeAnything) {
+        logger.error('❌ [Fix] No actual code changes were made', {
+          reason: 'no_changes',
+          failureRecordId,
+          filesAttempted: aiResponse.filesToChange.map((f: any) => f.filename),
+          attemptNumber: failureRecord.attempt_count + 1,
+          details: 'All files had identical content after replacement',
+        });
+        return null;
+      }
+
+      const { data: fixAttempt } = await supabaseAdmin
         .from('fix_attempts')
         .insert({
           failure_record_id: failureRecordId,
@@ -160,29 +196,30 @@ export class FixService {
         .select()
         .single();
 
-      if (insertError || !fixAttempt) {
-        logger.error('Failed to insert fix attempt', { error: insertError });
-        return null;
-      }
-
-      // Update failure record
       await supabaseAdmin
         .from('failure_records')
         .update({
           attempt_count: failureRecord.attempt_count + 1,
           current_branch: branchName,
-          updated_at: new Date().toISOString(),
         })
         .eq('id', failureRecordId);
 
-      logger.info('Fix applied successfully', { branchName, fixAttemptId: fixAttempt.id });
+      logger.info('Fix applied successfully', {
+        branchName,
+        fixAttemptId: fixAttempt.id,
+      });
 
       return {
         branchName,
         fixAttemptId: fixAttempt.id,
       };
     } catch (error) {
-      logger.error('Apply fix failed', { failureRecordId, error: String(error) });
+      logger.error('[Fix] Apply fix failed with exception', {
+        failureRecordId,
+        error: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        phase: 'apply_and_commit',
+      });
       return null;
     }
   }

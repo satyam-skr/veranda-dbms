@@ -15,10 +15,16 @@ export class DeploymentService {
     try {
       logger.info('Triggering deployment', { vercelProjectId, branchName });
 
-      // Fetch Vercel project
+      // Fetch Vercel project WITH GitHub installation details
       const { data: project, error } = await supabaseAdmin
         .from('vercel_projects')
-        .select('*')
+        .select(`
+          *,
+          github_installations!inner (
+            repo_owner,
+            repo_name
+          )
+        `)
         .eq('id', vercelProjectId)
         .single();
 
@@ -57,13 +63,31 @@ export class DeploymentService {
       // Fall back to API if hook didn't work
       if (!deploymentId) {
         try {
+          const installation = project.github_installations;
+          const repoFullName = `${installation.repo_owner}/${installation.repo_name}`;
+          
+          logger.info('Creating deployment via API', { 
+            projectName: project.project_name,
+            repo: repoFullName,
+            branch: branchName,
+            githubRepoId: project.github_repo_id, // Now available from database
+          });
+
+          // Build gitSource with repoId if available
+          const gitSource: any = {
+            type: 'github',
+            ref: branchName,
+          };
+
+          // Add repoId if we have it (prevents "repoId required" error)
+          if (project.github_repo_id) {
+            gitSource.repoId = project.github_repo_id;
+          }
+
           const deployment = await vercelClient.createDeployment({
             name: project.project_name,
-            gitSource: {
-              type: 'github',
-              ref: branchName,
-            },
-            target: 'preview',
+            gitSource,
+            // Don't set target - Vercel auto-determines it for Git-based deployments
           });
 
           deploymentId = deployment.id;
@@ -110,9 +134,16 @@ export class DeploymentService {
       try {
         const deployment = await vercelClient.getDeployment(deploymentId);
 
-        logger.info('Deployment status', { deploymentId, state: deployment.state, attempt });
+        // Log full state for debugging
+        logger.info('Deployment status', { 
+          deploymentId, 
+          state: deployment.state,
+          readyState: deployment.readyState,
+          attempt 
+        });
 
-        if (deployment.state === 'READY') {
+        // Check for success - Vercel uses 'READY' or readyState === 'READY'
+        if (deployment.state === 'READY' || deployment.readyState === 'READY') {
           // Success!
           await supabaseAdmin
             .from('fix_attempts')
@@ -123,7 +154,14 @@ export class DeploymentService {
           return { status: 'success' };
         }
 
-        if (deployment.state === 'ERROR' || deployment.state === 'CANCELED') {
+        // Check for failure - Vercel might use different state values
+        const failureStates = ['ERROR', 'CANCELED', 'FAILED', 'error', 'canceled', 'failed'];
+        const stateValue = deployment.state || '';
+        const readyStateValue = deployment.readyState || '';
+        
+        if (failureStates.includes(stateValue) || 
+            failureStates.includes(readyStateValue) ||
+            deployment.errorMessage) {
           // Failed - fetch logs
           const logs = await vercelClient.getDeploymentLogs(deploymentId);
 
@@ -132,7 +170,7 @@ export class DeploymentService {
             .update({ deployment_status: 'failed' })
             .eq('id', fixAttemptId);
 
-          logger.info('Deployment failed', { deploymentId, state: deployment.state });
+          logger.info('Deployment failed', { deploymentId, state: deployment.state, readyState: deployment.readyState });
           return { status: 'failed', logs };
         }
 

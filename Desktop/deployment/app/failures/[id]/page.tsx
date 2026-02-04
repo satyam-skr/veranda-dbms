@@ -4,6 +4,7 @@ import { Header } from '@/components/Header';
 import { FixAttemptCard } from '@/components/FixAttemptCard';
 import Link from 'next/link';
 import { getBaseUrl } from '@/lib/get-base-url';
+import { RetryButton } from '@/components/RetryButton';
 
 async function getFailureDetail(id: string) {
   const cookieStore = await cookies();
@@ -88,7 +89,7 @@ export default async function FailureDetailPage({
 
         {/* Failure Metadata */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-           <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
                 {installation
@@ -99,9 +100,14 @@ export default async function FailureDetailPage({
                 {failure.vercel_projects?.project_name}
               </p>
             </div>
-            <span className={`px-4 py-2 rounded-full font-medium ${config.color}`}>
-              {config.text}
-            </span>
+            <div className="flex gap-3 items-center">
+              {(failure.status === 'failed_after_max_retries' || failure.status === 'failed' || failure.status === 'fixed_successfully') && (
+                <RetryButton failureId={failure.id} />
+              )}
+              <span className={`px-4 py-2 rounded-full font-medium ${config.color}`}>
+                {config.text}
+              </span>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-4 mt-6">

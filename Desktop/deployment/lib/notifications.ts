@@ -94,3 +94,46 @@ export async function sendFailureEmail(params: {
   });
   console.log('='.repeat(80) + '\n');
 }
+
+/**
+ * Log unfixable error notification
+ * For errors that cannot be fixed by code changes (env vars, infrastructure, etc.)
+ */
+export async function sendUnfixableErrorEmail(params: {
+  to: string;
+  repoName: string;
+  errorCategory: string;
+  errorDescription: string;
+  userActionRequired: string;
+  deploymentLogs: string;
+}) {
+  const { to, repoName, errorCategory, errorDescription, userActionRequired, deploymentLogs } = params;
+
+  const notification = {
+    type: 'UNFIXABLE_ERROR',
+    to,
+    subject: '⚠️ AutoFix Cannot Fix This Error - User Action Required',
+    body: {
+      message: 'This deployment error requires your attention',
+      repository: repoName,
+      errorCategory,
+      errorDescription,
+      userActionRequired,
+      deploymentLogs,
+    },
+  };
+
+  logger.warn('⚠️ UNFIXABLE ERROR NOTIFICATION', notification);
+  
+  console.log('\n' + '='.repeat(80));
+  console.log('⚠️ DEPLOYMENT ERROR - USER ACTION REQUIRED');
+  console.log('='.repeat(80));
+  console.log(`Repository: ${repoName}`);
+  console.log(`Error Category: ${errorCategory}`);
+  console.log(`Description: ${errorDescription}`);
+  console.log(`\nAction Required:`);
+  console.log(`  ${userActionRequired}`);
+  console.log(`\nLog Preview:`);
+  console.log(`  ${deploymentLogs.substring(0, 300)}...`);
+  console.log('='.repeat(80) + '\n');
+}

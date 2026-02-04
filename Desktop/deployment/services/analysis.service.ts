@@ -1,331 +1,316 @@
 import { supabaseAdmin } from '../lib/supabase';
 import { decryptToken } from '../lib/encryption';
 import { createInstallationClient } from '../lib/github';
-import { callPerplexity } from '../lib/ai-client';
-import { validateAIResponse } from '../utils/validation';
+import { OpenAIService } from './openai.service';
 import { retryWithBackoff } from '../utils/retry';
 import { logger } from '../utils/logger';
 import { AIFixResponse } from '../lib/types';
+import { FixValidator } from './fix-validator.service';
 
 export class AnalysisService {
-  /**
-   * Analyze failure and generate AI fix
-   */
-  async analyzeFailureAndGenerateFix(failureRecordId: string): Promise<AIFixResponse | null> {
-    try {
-      logger.info('🔍 [AnalysisService] Starting AI analysis', { failureRecordId });
-      logger.info('Starting AI analysis', { failureRecordId });
+  async analyzeFailureAndGenerateFix(
+    failureRecordId: string
+  ): Promise<AIFixResponse | null> {
+    console.log('\n' + '🔍'.repeat(40));
+    console.log('🔍 [Analysis] STARTING ANALYSIS');
+    console.log(`🔍 Failure Record ID: ${failureRecordId}`);
+    console.log('🔍'.repeat(40));
 
-      // Fetch failure record with related data
-      logger.info('📋 [AnalysisService] Fetching failure record from database...');
-      const { data: failureRecord, error: fetchError } = await supabaseAdmin
-        .from('failure_records')
-        .select(`
-          *,
-          vercel_projects (
-            *,
-            github_installations (*)
+    logger.info('🔍 [AnalysisService] Starting AI analysis', { failureRecordId });
+
+    const { data: failureRecord } = await supabaseAdmin
+      .from('failure_records')
+      .select(`
+        *,
+        vercel_projects!inner (
+          github_installations!inner (
+            repo_owner,
+            repo_name,
+            installation_token,
+            installation_id
           )
-        `)
-        .eq('id', failureRecordId)
-        .single();
+        )
+      `)
+      .eq('id', failureRecordId)
+      .single();
 
-      logger.info('📥 [AnalysisService] Failure record fetch result:', { hasRecord: !!failureRecord, hasError: !!fetchError });
-
-      if (fetchError || !failureRecord) {
-        logger.error('❌ [AnalysisService] Failed to fetch failure record:', { error: fetchError });
-        logger.error('Failed to fetch failure record', { failureRecordId, error: fetchError });
-        return null;
-      }
-
-      // CRITICAL: Null-safety checks for nested relations
-      logger.info('🔍 [AnalysisService] Validating failure record structure:', {
-        hasFailureRecord: !!failureRecord,
-        hasVercelProject: !!failureRecord.vercel_projects,
-        hasGithubInstallation: !!failureRecord.vercel_projects?.github_installations,
-        projectName: failureRecord.vercel_projects?.project_name,
-        repoOwner: failureRecord.vercel_projects?.github_installations?.repo_owner,
-        repoName: failureRecord.vercel_projects?.github_installations?.repo_name,
-        installationId: failureRecord.vercel_projects?.github_installations?.installation_id,
-      });
-
-      if (!failureRecord.vercel_projects) {
-        logger.error('❌ [AnalysisService] BLOCKER: No vercel_projects relation found!', {
-          failureRecordId,
-          failureRecordKeys: Object.keys(failureRecord),
-        });
-        throw new Error('Failure record missing vercel_projects relation - database join failed');
-      }
-
-      const vercelProject = failureRecord.vercel_projects;
-
-      if (!vercelProject.github_installations) {
-        logger.error('❌ [AnalysisService] BLOCKER: No github_installations relation found!', {
-          projectId: vercelProject.id,
-          projectName: vercelProject.project_name,
-          githubInstallationId: vercelProject.github_installation_id,
-          vercelProjectKeys: Object.keys(vercelProject),
-        });
-        throw new Error('Vercel project missing github_installations relation - foreign key broken or not joined');
-      }
-
-      const installation = vercelProject.github_installations;
-
-      if (!installation.access_token && !installation.installation_token) {
-        logger.error('❌ [AnalysisService] BLOCKER: No GitHub tokens found!', {
-          installationId: installation.id,
-          hasAccessToken: !!installation.access_token,
-          hasInstallationToken: !!installation.installation_token,
-        });
-        throw new Error('GitHub installation missing tokens - re-authentication required');
-      }
-
-      logger.info('✅ [AnalysisService] All relations validated successfully');
-
-      // Update status to fixing
-      await supabaseAdmin
-        .from('failure_records')
-        .update({ status: 'fixing', updated_at: new Date().toISOString() })
-        .eq('id', failureRecordId);
-
-      // Decrypt installation token
-      const installationToken = installation.installation_token
-        ? await decryptToken(installation.installation_token)
-        : null;
-
-      logger.info('🔐 [AnalysisService] Token decrypt result:', { hasToken: !!installationToken });
-
-      if (!installationToken) {
-        logger.error('❌ [AnalysisService] No installation token available');
-        logger.error('No installation token available', { installationId: installation.id });
-        return null;
-      }
-
-      // Create GitHub client
-      logger.info('🐙 [AnalysisService] Creating GitHub client...');
-      const octokit = await createInstallationClient(installation.installation_id);
-      logger.info('✅ [AnalysisService] GitHub client created');
-
-      // Fetch repository files
-      logger.info('📂 [AnalysisService] Fetching repository files...');
-      const fileContents = await this.fetchRepositoryFiles(
-        octokit,
-        installation.repo_owner,
-        installation.repo_name
-      );
-      logger.info('📥 [AnalysisService] Files fetched:', { count: Object.keys(fileContents).length });
-
-      // Construct AI prompt
-      logger.info('📝 [AnalysisService] Constructing AI prompt...');
-      const prompt = this.constructPrompt(failureRecord.logs, fileContents);
-      logger.info('✅ [AnalysisService] Prompt constructed, length:', { length: prompt.length });
-
-      // Call Perplexity API with retry
-      logger.info('🤖 [AnalysisService] Calling Perplexity API (with retry)...');
-      const aiResponse = await retryWithBackoff(async () => {
-        return await this.callPerplexityAPI(prompt);
-      }, 3, 2000);
-      logger.info('📥 [AnalysisService] Perplexity response:', { hasResponse: !!aiResponse, filesCount: aiResponse?.filesToChange?.length });
-
-      if (!aiResponse) {
-        logger.error('❌ [AnalysisService] Perplexity API returned no response');
-        logger.error('Perplexity API returned no response', { failureRecordId });
-        return null;
-      }
-
-      // Validate AI response
-      const validation = validateAIResponse(aiResponse.filesToChange);
-      if (!validation.isValid) {
-        logger.error('AI response validation failed', {
-          failureRecordId,
-          reason: validation.reason,
-        });
-
-        // Mark as failed
-        await supabaseAdmin
-          .from('failure_records')
-          .update({
-            status: 'failed_after_max_retries',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', failureRecordId);
-
-        return null;
-      }
-
-      logger.info('✅ [AnalysisService] AI analysis completed successfully');
-      logger.info('AI analysis completed successfully', { failureRecordId });
-      return aiResponse;
-    } catch (error: any) {
-      logger.error('❌ [AnalysisService] CRASHED:', { failureRecordId, error: error.message, stack: error.stack });
-      logger.error('Analysis failed', { failureRecordId, error: String(error) });
+    if (!failureRecord?.logs) {
+      logger.error('❌ No logs available for AI');
       return null;
     }
-  }
 
-  /**
-   * Fetch repository files for context
-   */
-  private async fetchRepositoryFiles(
-    octokit: any,
-    owner: string,
-    repo: string
-  ): Promise<Record<string, string>> {
-    const files: Record<string, string> = {};
-    const filesToFetch = [
-      'package.json',
-      'tsconfig.json',
-      'next.config.ts',
-      'next.config.js',
-      '.eslintrc',
-      '.eslintrc.json',
-      'tailwind.config.ts',
-      'tailwind.config.js',
-    ];
+    const installation = failureRecord.vercel_projects.github_installations;
+    const token = await decryptToken(installation.installation_token);
+    if (!token) return null;
 
-    // Fetch config files
-    for (const filename of filesToFetch) {
-      try {
-        const { data } = await octokit.rest.repos.getContent({
-          owner,
-          repo,
-          path: filename,
-        });
+    const octokit = await createInstallationClient(
+      installation.installation_id
+    );
 
-        if ('content' in data) {
-          const content = Buffer.from(data.content, 'base64').toString('utf-8');
-          files[filename] = content;
-        }
-      } catch (error) {
-        // File doesn't exist, skip
+    /* =========================================================
+       STEP 1: FIND FILES FROM LOGS (PRIMARY EXTRACTION)
+    ========================================================= */
+    console.log('📝 [Analysis] Step 1: Extracting file paths from logs...');
+    console.log('📜 Logs Preview:', failureRecord.logs.slice(-500));
+    
+    const fileContents: Record<string, string> = {};
+    const regex = /(src\/[^\s:'")]+\.[jt]sx?)/gi;
+    const matches = [...failureRecord.logs.matchAll(regex)].map(m => m[1]);
+
+    let filesToFetch = [...new Set(matches)];
+
+    /* =========================================================
+       STEP 2: SECONDARY FILE SCANNING (ENHANCED FALLBACK)
+    ========================================================= */
+    if (filesToFetch.length === 0) {
+      logger.warn('⚠️ [Analysis] No file paths from primary extraction — scanning for extensions/patterns');
+
+      const logs = failureRecord.logs;
+
+      // Scan for any file extensions in the error message
+      const extensionPatterns = [
+        /([\w\/\-\.]+\.tsx?)/gi,
+        /([\w\/\-\.]+\.jsx?)/gi,
+        /([\w\/\-\.]+\.css)/gi,
+        /([\w\/\-\.]+\.json)/gi,
+      ];
+
+      for (const pattern of extensionPatterns) {
+        const found = [...logs.matchAll(pattern)].map(m => m[1]);
+        filesToFetch.push(...found);
       }
+
+      // Scan for common path patterns
+      const pathPatterns = [
+        /((?:src|components|pages|app|lib)\/[^\s:'")]+)/gi,
+      ];
+
+      for (const pattern of pathPatterns) {
+        const found = [...logs.matchAll(pattern)].map(m => m[1]);
+        filesToFetch.push(...found);
+      }
+
+      filesToFetch = [...new Set(filesToFetch)];
+
+      // LAST RESORT: Component name guessing
+      if (filesToFetch.length === 0) {
+        logger.warn('⚠️ [Analysis] No paths found — attempting component name inference');
+
+        if (/Footer/i.test(logs)) {
+          filesToFetch.push('src/components/Footer.jsx', 'src/components/Footer.tsx');
+        } else if (/App/i.test(logs)) {
+          filesToFetch.push('src/App.jsx', 'src/App.tsx');
+        } else if (/Header/i.test(logs)) {
+          filesToFetch.push('src/components/Header.jsx', 'src/components/Header.tsx');
+        }
+
+        if (filesToFetch.length === 0) {
+          logger.error('❌ [Analysis] Unable to extract any file paths from logs', {
+            reason: 'file_extraction_failed',
+            logsPreview: logs.slice(0, 500),
+          });
+          return null;
+        }
+      }
+
+      logger.info('📁 [Analysis] Files identified via fallback', { files: filesToFetch });
     }
 
-    // Fetch src directory files (limit to 30 files)
-    try {
-      const { data: srcContents } = await octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: 'src',
-      });
+    /* =========================================================
+       STEP 3: FETCH FILES FROM GITHUB WITH CONTEXT
+    ========================================================= */
+    const neighboringFiles: string[] = [];
+    
+    for (const file of filesToFetch) {
+      try {
+        const { data } = await octokit.rest.repos.getContent({
+          owner: installation.repo_owner,
+          repo: installation.repo_name,
+          path: file,
+        });
 
-      if (Array.isArray(srcContents)) {
-        let fetchedCount = 0;
-        for (const item of srcContents) {
-          if (fetchedCount >= 30) break;
-          if (item.type === 'file' && /\.(ts|tsx|js|jsx)$/.test(item.name)) {
+        if ('content' in data && !Array.isArray(data)) {
+          fileContents[file] = Buffer.from(
+            data.content,
+            'base64'
+          ).toString('utf-8');
+          
+          // Fetch neighboring files for the FIRST failing file to provide import context
+          if (neighboringFiles.length === 0) {
+            const dirPath = file.split('/').slice(0, -1).join('/');
             try {
-              const { data: fileData } = await octokit.rest.repos.getContent({
-                owner,
-                repo,
-                path: item.path,
+              const { data: dirData } = await octokit.rest.repos.getContent({
+                owner: installation.repo_owner,
+                repo: installation.repo_name,
+                path: dirPath || '.',
               });
-
-              if ('content' in fileData) {
-                const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
-                files[item.path] = content;
-                fetchedCount++;
+              
+              if (Array.isArray(dirData)) {
+                neighboringFiles.push(...dirData.map(f => f.name));
               }
-            } catch (e) {
-              // Skip on error
+            } catch (dirErr) {
+              logger.warn('⚠️ Failed to fetch neighboring files', { dirPath });
             }
           }
         }
+      } catch (err) {
+        logger.warn('⚠️ Failed to fetch file', { file });
       }
-    } catch (error) {
-      // src directory doesn't exist or error, skip
     }
 
-    return files;
-  }
-
-  /**
-   * Construct prompt for AI
-   */
-  private constructPrompt(logs: string, fileContents: Record<string, string>): string {
-    // Truncate logs if too long (keep last 5000 chars which usually contains the error)
-    const sanitizedLogs = logs.length > 5000 ? '...\n' + logs.slice(-5000) : logs;
-
-    let prompt = `You are an expert software engineer analyzing a failed Vercel deployment.
-
-Here are the full build logs:
-\`\`\`
-${sanitizedLogs}
-\`\`\`
-
-Here are the relevant project files:
-`;
-
-    for (const [filename, content] of Object.entries(fileContents)) {
-      const truncatedContent = content.length > 2000 ? content.slice(0, 2000) + '\n...[truncated]' : content;
-      prompt += `\n--- ${filename} ---\n\`\`\`\n${truncatedContent}\n\`\`\`\n`;
-    }
-
-    prompt += `
-Your task: Analyze these deployment logs, identify the root cause of the failure, and provide an exact code fix.
-
-CRITICAL CONSTRAINTS:
-- Only modify files in: src/, next.config.ts, next.config.js, package.json, tsconfig.json, .eslintrc files, middleware.ts, tailwind.config.ts
-- Never modify .env files, .git directory, node_modules, or any security-sensitive files
-- Never add system calls like child_process exec, eval, or Function constructor
-- Never expose credentials or API keys
-- Provide minimal precise changes targeting only the error
-
-You must respond with ONLY valid JSON in this exact structure with no additional text:
-{
-  "rootCause": "string describing what caused the failure",
-  "filesToChange": [
-    {
-      "filename": "path/to/file",
-      "oldCode": "exact code to replace (can be empty for new files)",
-      "newCode": "replacement code"
-    }
-  ],
-  "explanation": "string describing why this fix works"
-}
-`;
-
-    return prompt;
-  }
-
-  /**
-   * Call Perplexity API
-   */
-  private async callPerplexityAPI(prompt: string): Promise<AIFixResponse | null> {
-    try {
-      const responseText = await callPerplexity({
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a code fixing assistant that analyzes deployment failures and provides precise fixes. Always respond with valid JSON only.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        maxTokens: 4096,
+    if (Object.keys(fileContents).length === 0) {
+      logger.error('❌ [Analysis] No files could be loaded for AI', {
+        reason: 'github_fetch_failed',
+        attemptedFiles: filesToFetch,
+        failureRecordId,
       });
-
-      // Parse JSON response
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        logger.error('No JSON found in Perplexity response', { response: responseText });
-        return null;
-      }
-
-      const aiResponse = JSON.parse(jsonMatch[0]) as AIFixResponse;
-
-      // Validate structure
-      if (!aiResponse.rootCause || !aiResponse.filesToChange || !aiResponse.explanation) {
-        logger.error('Invalid AI response structure', { aiResponse });
-        return null;
-      }
-
-      return aiResponse;
-    } catch (error) {
-      logger.error('Perplexity API call failed', { error: String(error) });
-      throw error;
+      return null;
     }
+
+    const firstFilePath = filesToFetch[0];
+    const fileExtension = firstFilePath.split('.').pop() || 'js';
+    const fullFileContent = fileContents[firstFilePath] || '';
+
+    /* =========================================================
+       STEP 4: SAFEGUARD #5 - STRUCTURED AI PROMPT
+    ========================================================= */
+    const prompt = `You are a code-fixing AI. A build failed with this error:
+
+ERROR:
+${failureRecord.logs.slice(-2000)}
+
+FAILED FILE: ${firstFilePath}
+
+CURRENT FILE CONTENT:
+\`\`\`${fileExtension}
+${fullFileContent}
+\`\`\`
+
+AVAILABLE IMPORTS (files in same directory):
+${neighboringFiles.join(', ')}
+
+YOUR TASK:
+1. Identify the exact cause of the error
+2. Fix ONLY that specific issue
+3. Return the COMPLETE fixed file (all ${fullFileContent.split('\n').length} lines)
+4. Do NOT use "..." or skip any code
+5. Do NOT change unrelated code
+
+RESPOND WITH ONLY THIS JSON (no markdown, no explanation):
+{
+  "rootCause": "brief description of what's wrong",
+  "filename": "${firstFilePath}",
+  "explanation": "brief description of what you fixed",
+  "fixedCode": "...THE ENTIRE FILE WITH FIX APPLIED..."
+}
+
+CRITICAL: The fixedCode must be the COMPLETE file. If the original is 300 lines, your response must be ~300 lines.`;
+
+    /* =========================================================
+       STEP 5: CALL AI
+    ========================================================= */
+    console.log('🤖 [Analysis] Step 3: Calling AI for fix...');
+    console.log(`📤 Sending prompt to AI (${prompt.length} chars)`);
+
+    const aiResponse = await retryWithBackoff(
+      async () => {
+        const openAI = new OpenAIService();
+        return await openAI.generateCodeFix(prompt);
+      },
+      2,
+      1500
+    );
+
+    console.log('📥 [Analysis] AI Response received');
+    console.log('📊 AI Response keys:', aiResponse ? Object.keys(aiResponse) : 'NULL');
+
+    /* =========================================================
+       STEP 6: RESPONSE VALIDATION WITH DETAILED LOGGING
+    ========================================================= */
+    if (!aiResponse) {
+      logger.error('❌ [Analysis] AI returned null/undefined response', {
+        reason: 'ai_parse_failed',
+        failureRecordId,
+      });
+      return null;
+    }
+
+    if (!aiResponse.fixedCode || !aiResponse.filename) {
+      logger.error('❌ [Analysis] AI response missing fixedCode or filename', {
+        reason: 'missing_response_fields',
+        aiResponseKeys: Object.keys(aiResponse),
+        failureRecordId,
+      });
+      return null;
+    }
+
+    // Check for empty code
+    if (aiResponse.fixedCode.trim().length === 0) {
+      logger.error('❌ [Analysis] AI returned empty code', {
+        reason: 'code_too_short',
+        file: aiResponse.filename,
+        codeLength: 0,
+        failureRecordId,
+      });
+      return null;
+    }
+
+    // Check for NO-OP (exact match only)
+    const original = fileContents[aiResponse.filename];
+    if (original && original.trim() === aiResponse.fixedCode.trim()) {
+      logger.error('❌ [Analysis] AI returned NO-OP fix (exact match)', {
+        reason: 'no_diff',
+        file: aiResponse.filename,
+        originalLength: original.length,
+        newLength: aiResponse.fixedCode.length,
+        failureRecordId,
+      });
+      return null;
+    }
+
+    // Prepare filesToChange for backward compatibility or just wrap it
+    const filesToChange = [{
+      filename: aiResponse.filename,
+      oldCode: '',
+      newCode: aiResponse.fixedCode
+    }];
+
+    const validations = await Promise.all(
+      filesToChange.map((f: { filename: string; newCode: string }) =>
+        FixValidator.validateFix(
+          f.filename,
+          '',
+          f.newCode,
+          '',
+          fileContents[f.filename],
+          async () => true
+        )
+      )
+    );
+
+    const failedValidations = validations.filter(v => !v.isValid);
+    if (failedValidations.length > 0) {
+      logger.error('❌ [Analysis] Fix validation failed', {
+        reason: 'validation_failed',
+        failureCount: failedValidations.length,
+        validationResults: failedValidations.map(v => ({
+          reason: v.reason,
+          details: v.details,
+          errors: v.errors,
+        })),
+        failureRecordId,
+      });
+      return null;
+    }
+
+    logger.info('✅ [Analysis] AI produced valid code fix', {
+      fileCount: filesToChange.length,
+      files: filesToChange.map((f: any) => f.filename),
+    });
+    
+    return {
+      ...aiResponse,
+      filesToChange // Convert to expected format
+    };
   }
 }

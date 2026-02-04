@@ -40,6 +40,11 @@ export function FailureCard({ failure }: FailureCardProps) {
       text: 'Failed',
       bgColor: 'bg-red-50 text-red-700 border-red-200',
     },
+    failed_unfixable: {
+      color: 'bg-orange-500',
+      text: 'Unfixable',
+      bgColor: 'bg-orange-50 text-orange-700 border-orange-200',
+    },
   };
 
   const config = statusConfig[failure.status];

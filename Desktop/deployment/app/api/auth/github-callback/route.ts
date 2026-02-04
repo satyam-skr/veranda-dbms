@@ -5,10 +5,18 @@ import { logger } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {
+    logger.info('🔵 GitHub callback STARTED', {
+      url: request.url,
+      method: request.method,
+    });
+
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
 
+    logger.info('OAuth code received', { hasCode: !!code });
+
     if (!code) {
+      logger.error('No OAuth code provided');
       const url = new URL(request.url);
       const baseUrl = `${url.protocol}//${url.host}`;
       return NextResponse.redirect(`${baseUrl}?error=no_code`);
@@ -92,16 +100,41 @@ export async function GET(request: NextRequest) {
 
     logger.info('User authenticated', { userId: user.id, username: userData.login });
 
-    // Set session cookie
+    // Set session cookie with settings that work for OAuth on Vercel
     const url = new URL(request.url);
     const baseUrl = `${url.protocol}//${url.host}`;
+    
+    logger.info('🍪 About to set cookie', { 
+      userId: user.id,
+      baseUrl,
+      redirectTo: `${baseUrl}/dashboard`
+    });
+
     const response = NextResponse.redirect(`${baseUrl}/dashboard`);
+    
+    // Try multiple cookie approaches to see which works
+    // Approach 1: sameSite none
     response.cookies.set('user_id', user.id, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    // Approach 2: Also try a debug cookie without httpOnly
+    response.cookies.set('user_id_debug', user.id, {
+      httpOnly: false, // Visible in JS for debugging
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    logger.info('✅ Cookie set for user', { 
+      userId: user.id,
+      cookieCount: 2,
+      responseStatus: response.status
     });
 
     return response;

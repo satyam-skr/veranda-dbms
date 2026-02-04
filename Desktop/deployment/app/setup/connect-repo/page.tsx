@@ -3,8 +3,8 @@
 export default function ConnectRepoPage() {
   const handleConnect = () => {
     // Redirect to GitHub App installation
-    // Replace YOUR_GITHUB_APP_NAME with your actual GitHub App name
-    const githubAppUrl = 'https://github.com/apps/AutoFix-Arkin26/installations/new';
+    // Use select_target to force repo selection
+    const githubAppUrl = 'https://github.com/apps/autofix-arkin26/installations/select_target';
     window.location.href = githubAppUrl;
   };
 

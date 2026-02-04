@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { RepoCard } from '@/components/RepoCard';
 import { FailureCard } from '@/components/FailureCard';
+import { RemoveAllReposButton } from '@/components/RemoveAllReposButton';
 import Link from 'next/link';
 import { getBaseUrl } from '@/lib/get-base-url';
 
@@ -90,19 +91,44 @@ export default async function DashboardPage() {
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Connected Repositories</h2>
-            <Link
-              href="/setup/connect-repo"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              + Connect Repository
-            </Link>
+            <div className="flex items-center gap-3">
+              {repos && repos.length > 0 && <RemoveAllReposButton />}
+              <Link
+                href="/setup/connect-repo"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                + Connect Repository
+              </Link>
+            </div>
           </div>
 
           {repos && repos.length > 0 ? (
             <div className="grid md:grid-cols-2 gap-6">
-              {repos.map((repo: any) => (
-                <RepoCard key={repo.id} repo={repo} />
-              ))}
+              {repos.map((repo: any) => {
+                // Find latest failure for this repo
+                const failure = recentFailures.find((f: any) => 
+                  f.vercel_projects?.github_installation_id === repo.id
+                );
+                
+                let status: 'healthy' | 'failed' | 'fixing' | 'action_required' = 'healthy';
+                
+                if (failure) {
+                  if (failure.status === 'pending_analysis' || failure.status === 'fixing') {
+                    status = 'fixing';
+                  } else if (failure.status === 'failed_after_max_retries') {
+                    // Check if it's an unfixable error requiring action
+                    if (failure.is_fixable === false || failure.user_notified === true) {
+                      status = 'action_required';
+                    } else {
+                      status = 'failed';
+                    }
+                  }
+                }
+
+                return (
+                  <RepoCard key={repo.id} repo={repo} status={status} />
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-md p-12 text-center">

@@ -31,12 +31,13 @@ export interface VercelProject {
   vercelToken: string;
   deployHookUrl?: string;
   lastCheckedDeploymentId?: string;
+  isFixing?: boolean;  // Project-level lock for AutoFix
   createdAt: Date;
   updatedAt: Date;
 }
 
 // Failure Status type
-export type FailureStatus = 'pending_analysis' | 'fixing' | 'fixed_successfully' | 'failed_after_max_retries';
+export type FailureStatus = 'pending_analysis' | 'fixing' | 'fixed_successfully' | 'failed_after_max_retries' | 'failed_unfixable';
 
 // Failure Record types
 export interface FailureRecord {
@@ -48,6 +49,7 @@ export interface FailureRecord {
   status: FailureStatus;
   attemptCount: number;
   currentBranch?: string;
+  isManualRetry?: boolean;  // Track manual retry attempts
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,6 +74,14 @@ export interface AIFixResponse {
   rootCause: string;
   filesToChange: FileChange[];
   explanation: string;
+  errorClassification?: {
+    category: string;
+    isFixable: boolean;
+    confidence: number;
+    reasoning: string;
+    userActionRequired?: string;
+    suggestedFix?: string;
+  };
 }
 
 export interface FileChange {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase';
 import { githubApp } from '@/lib/github';
 import { encryptToken } from '@/lib/encryption';
+import { VercelAutoDeployService } from '@/lib/vercel-auto-deploy';
 import { logger } from '@/utils/logger';
 
 const schema = z.object({
@@ -67,7 +68,50 @@ export async function POST(request: NextRequest) {
       repo: `${repoOwner}/${repoName}`,
     });
 
-    return NextResponse.json({ success: true, installation });
+    // 🚀 NEW: Automatically deploy to Vercel!
+    try {
+      logger.info('🚀 Starting automatic Vercel deployment', {
+        repo: `${repoOwner}/${repoName}`,
+      });
+
+      const autoDeployService = new VercelAutoDeployService();
+      const deploymentResult = await autoDeployService.autoDeployRepository({
+        userId,
+        githubInstallationId: installation.id,
+        installationId,
+        repoOwner,
+        repoName,
+      });
+
+      logger.info('✅ Auto-deployment successful', {
+        vercelProjectId: deploymentResult.vercelProjectId,
+        deploymentId: deploymentResult.deploymentId,
+        deploymentUrl: deploymentResult.deploymentUrl,
+      });
+
+      return NextResponse.json({
+        success: true,
+        installation,
+        vercelProject: {
+          id: deploymentResult.vercelProjectId,
+          deploymentUrl: deploymentResult.deploymentUrl,
+          deploymentId: deploymentResult.deploymentId,
+        },
+      });
+    } catch (deployError) {
+      // If auto-deployment fails, still return success for GitHub connection
+      // User can manually connect Vercel later or we'll retry
+      logger.error('Auto-deployment failed, but GitHub connected successfully', {
+        error: String(deployError),
+      });
+
+      return NextResponse.json({
+        success: true,
+        installation,
+        warning: 'GitHub connected but auto-deployment failed. Please check Vercel configuration.',
+        error: String(deployError),
+      });
+    }
   } catch (error) {
     logger.error('Connect repo error', { error: String(error) });
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });

@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { VercelClient } from '@/lib/vercel';
 import { encryptToken } from '@/lib/encryption';
 import { logger } from '@/utils/logger';
+import { CommentWriterService } from '@/services/comment-writer.service';
 
 const schema = z.object({
   githubInstallationId: z.string().uuid(),
@@ -80,6 +81,35 @@ export async function POST(request: NextRequest) {
       projectId,
       projectName: projectData.name,
     });
+
+    // ✨ NEW: Write AI comment to random file (non-blocking)
+    try {
+      const commentWriter = new CommentWriterService();
+      const result = await commentWriter.writeCommentToRandomFile(
+        installation.installation_id,
+        installation.repo_owner,
+        installation.repo_name
+      );
+      
+      // Log to console for user visibility
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`✨ AI Comment written to: ${result.filename}`);
+      console.log(`📝 Comment: ${result.comment}`);
+      console.log(`🔗 Commit: ${result.commitSha.slice(0, 7)}`);
+      console.log(`${'='.repeat(60)}\n`);
+      
+      logger.info('AI comment written on deploy', {
+        filename: result.filename,
+        comment: result.comment,
+        repo: `${installation.repo_owner}/${installation.repo_name}`,
+      });
+    } catch (commentError) {
+      // Non-blocking - log error but continue with successful deployment
+      console.error('⚠️  Failed to write AI comment (non-critical):', String(commentError));
+      logger.error('Failed to write AI comment (non-critical)', { 
+        error: String(commentError) 
+      });
+    }
 
     return NextResponse.json({ success: true, project });
   } catch (error) {
