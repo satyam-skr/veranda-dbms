@@ -9,12 +9,24 @@ export async function POST(request: NextRequest) {
   console.log('🔔 WEBHOOK RECEIVED AT:', new Date().toString());
   
   try {
+    // 📋 Log Request Headers
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    console.log('📋 REQUEST HEADERS:', JSON.stringify(headers, null, 2));
+
+    // 📦 Log Raw Webhook Body
     const rawBody = await request.text();
-    console.log("📦 RAW WEBHOOK:", rawBody);
+    console.log("📦 RAW WEBHOOK BODY:", rawBody);
     
+    // 🔍 Log Parsed Payload Structure
     const body = JSON.parse(rawBody);
-    console.log("🔍 PARSED:", JSON.stringify(body, null, 2));
+    console.log("🔍 PARSED PAYLOAD STRUCTURE:", JSON.stringify(body, null, 2));
     console.log('✅ Payload parsed');
+
+    // 📊 Log Top-Level Keys
+    console.log('📊 TOP-LEVEL KEYS:', Object.keys(body));
     
     console.log('🔍 Checking event type...');
     const eventType = body.type;
@@ -22,6 +34,14 @@ export async function POST(request: NextRequest) {
 
     const payload = body.payload;
     const deployment = payload?.deployment;
+    
+    // 🚀 Log Deployment Object specifically
+    if (deployment) {
+      console.log('🚀 DEPLOYMENT OBJECT:', JSON.stringify(deployment, null, 2));
+    } else {
+      console.log('🚀 DEPLOYMENT OBJECT: NOT FOUND');
+    }
+
     const projectId = payload?.projectId || deployment?.projectId;
     const deploymentId = deployment?.id;
     const state = deployment?.state;
