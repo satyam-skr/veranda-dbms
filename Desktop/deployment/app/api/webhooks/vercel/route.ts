@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
     // DEBUG: Save raw body to DB to inspect structure
     try {
       await supabaseAdmin.from('failure_records').insert({
-        vercel_project_id: 999999, // Placeholder ID
-        deployment_id: 'DEBUG',
+        vercel_project_id: 'a690c4fa-fe10-4413-bf36-ab0f408fd4c5', // autofix-test ID
+        deployment_id: 'DEBUG-' + Date.now(),
         failure_source: 'debug_webhook',
         logs: rawBody,
         status: 'pending_analysis',
