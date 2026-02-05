@@ -15,6 +15,21 @@ export async function POST(request: NextRequest) {
     console.log(rawBody);
     console.log("---");
 
+    // DEBUG: Save raw body to DB to inspect structure
+    try {
+      await supabaseAdmin.from('failure_records').insert({
+        vercel_project_id: 999999, // Placeholder ID
+        deployment_id: 'DEBUG',
+        failure_source: 'debug_webhook',
+        logs: rawBody,
+        status: 'pending_analysis',
+        attempt_count: 0,
+      });
+      console.log('✅ DEBUG: Raw webhook saved to DB');
+    } catch (saveError) {
+      console.error('⚠️ DEBUG: Failed to save raw webhook to DB', saveError);
+    }
+
     // Step 2: Parse JSON
     const body = JSON.parse(rawBody);
     console.log("🔍 PARSED PAYLOAD STRUCTURE:");
