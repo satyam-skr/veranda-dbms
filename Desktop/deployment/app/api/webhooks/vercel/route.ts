@@ -15,89 +15,30 @@ export async function POST(request: NextRequest) {
     console.log(rawBody);
     console.log("---");
 
-    // DEBUG: Save raw body to DB to inspect structure
-    try {
-      await supabaseAdmin.from('failure_records').insert({
-        vercel_project_id: 'a690c4fa-fe10-4413-bf36-ab0f408fd4c5', // autofix-test ID
-        deployment_id: 'DEBUG-' + Date.now(),
-        failure_source: 'debug_webhook',
-        logs: rawBody,
-        status: 'pending_analysis',
-        attempt_count: 0,
-      });
-      console.log('✅ DEBUG: Raw webhook saved to DB');
-    } catch (saveError) {
-      console.error('⚠️ DEBUG: Failed to save raw webhook to DB', saveError);
-    }
-
     // Step 2: Parse JSON
     const body = JSON.parse(rawBody);
-    console.log("🔍 PARSED PAYLOAD STRUCTURE:");
-    console.log(JSON.stringify(body, null, 2));
-    console.log("---");
 
-    // Step 3: Log all top-level keys
-    console.log("📊 TOP-LEVEL KEYS:", Object.keys(body));
-    console.log("---");
-
-    // Step 4: Log request headers
-    const headers: Record<string, string> = {};
-    request.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-    console.log("📋 REQUEST HEADERS:");
-    console.log(JSON.stringify(headers, null, 2));
-    console.log("---");
-
-    // Step 5: Check for deployment object
-    const payload = body.payload || body; // Vercel payloads sometimes have body as payload or are flat
-    const deployment = payload.deployment || body.deployment;
-
-    if (deployment) {
-      console.log("🚀 DEPLOYMENT OBJECT:");
-      console.log(JSON.stringify(deployment, null, 2));
-      console.log("Deployment keys:", Object.keys(deployment));
-    } else {
-      console.log("⚠️ NO DEPLOYMENT OBJECT FOUND");
-    }
-    console.log("---");
-
-    // Step 6: Check for common webhook properties
-    console.log("🔎 CHECKING COMMON PROPERTIES:");
-    console.log("body.type:", body.type);
-    console.log("payload.type:", payload.type);
-    console.log("payload.state:", payload.state);
-    console.log("payload.target:", payload.target);
-    console.log("payload.deploymentId:", payload.deploymentId);
-    console.log("payload.projectId:", payload.projectId);
-    console.log("deployment?.state:", deployment?.state);
-    console.log("deployment?.id:", deployment?.id);
-    console.log("deployment?.projectId:", deployment?.projectId);
-    console.log("---");
-
-    // Robust extraction based on observed Vercel structures
-    const state = deployment?.state || payload.state || body.state;
+    // Correct extraction based on actual Vercel webhook structure
     const eventType = body.type;
-    const projectId = payload.projectId || deployment?.projectId || payload.target || body.projectId;
-    const deploymentId = deployment?.id || payload.deploymentId || body.deploymentId;
+    const projectId = body.payload?.projectId;
+    const deploymentId = body.payload?.deployment?.id;
+    const state = body.payload?.deployment?.state;
 
     console.log("✅ EXTRACTED VALUES:");
-    console.log("state:", state);
     console.log("eventType:", eventType);
     console.log("projectId:", projectId);
     console.log("deploymentId:", deploymentId);
+    console.log("state:", state);
 
     // Check if this is a failure event
     const isFailed = eventType === 'deployment.error' || 
-                     eventType === 'deployment.failed' || 
-                     state === 'ERROR' ||
-                     state === 'FAILED';
+                     eventType === 'deployment.failed';
     
     if (isFailed) {
       console.log('✅ FAILURE DETECTED - Preparing to trigger AutoFix');
       
       if (!projectId || !deploymentId) {
-        console.error('❌ Missing Project ID or Deployment ID in webhook after robust extraction');
+        console.error('❌ Missing Project ID or Deployment ID in webhook');
         return NextResponse.json({ success: true, error: 'Missing data logged' });
       }
 
