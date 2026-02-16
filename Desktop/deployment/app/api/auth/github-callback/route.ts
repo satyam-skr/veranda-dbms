@@ -15,8 +15,23 @@ export async function GET(request: NextRequest) {
 
     logger.info('OAuth code received', { hasCode: !!code });
 
+    // DETECT MISCONFIGURATION:
+    // If this endpoint receives 'installation_id' but no 'code', it means the GitHub App
+    // 'Setup URL' is pointing here by mistake. Forward it to the correct handler.
+    if (!code && searchParams.has('installation_id')) {
+      logger.warn('⚠️ Forwarding misdirected installation callback', {
+        params: searchParams.toString()
+      });
+      const url = new URL(request.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      // Construct the correct URL preserving all params
+      return NextResponse.redirect(`${baseUrl}/api/github/installation-callback?${searchParams.toString()}`);
+    }
+
     if (!code) {
-      logger.error('No OAuth code provided');
+      logger.error('No OAuth code provided', { 
+        params: Object.fromEntries(searchParams.entries()) 
+      });
       const url = new URL(request.url);
       const baseUrl = `${url.protocol}//${url.host}`;
       return NextResponse.redirect(`${baseUrl}?error=no_code`);
