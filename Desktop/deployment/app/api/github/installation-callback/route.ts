@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase';
 import { createInstallationClient } from '@/lib/github';
+import { createAppAuth } from '@octokit/auth-app';
 import { encryptToken } from '@/lib/encryption';
 import { logger } from '@/utils/logger';
 import { VercelAutoDeployService } from '@/lib/vercel-auto-deploy';
 
 /**
  * GitHub App Installation Callback
- * This is called after user installs the GitHub App and selects repositories
+ * Called after user installs the GitHub App and selects repositories.
+ *
+ * PRODUCTION FIX: On Vercel, the browser may not send the `user_id` cookie
+ * when GitHub redirects back (cross-origin navigation + cookie security policies).
+ * As a fallback, we look up the user by the GitHub account that owns the repos.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,30 +26,75 @@ export async function GET(request: NextRequest) {
       setupAction,
     });
 
-    // Get user ID from cookie — try both methods for reliability
-    const cookieStore = await cookies();
-    const userId = cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
-
-    logger.info('🍪 Cookie check in installation callback', {
-      userId: userId ? `${userId.substring(0, 8)}...` : 'MISSING',
-      cookieStoreNames: cookieStore.getAll().map(c => c.name),
-      requestCookieNames: request.cookies.getAll().map(c => c.name),
-    });
-
-    if (!userId) {
-      logger.error('No user_id cookie found in installation callback');
-      return NextResponse.redirect(new URL('/?error=not_authenticated', request.url));
-    }
-
     if (!installationId) {
       logger.error('No installation_id provided');
       return NextResponse.redirect(new URL('/?error=no_installation', request.url));
     }
 
-    // Get installation client
+    // ─── Step 1: Resolve user ID ───────────────────────────────────
+    // Try cookie first, then fall back to looking up user by GitHub account
+    const cookieStore = await cookies();
+    let userId = cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+
+    if (!userId) {
+      logger.warn('🍪 No cookie – attempting GitHub account lookup fallback');
+
+      // Use App-level auth to get installation details (who installed it)
+      try {
+        const appAuth = createAppAuth({
+          appId: process.env.GITHUB_APP_ID!,
+          privateKey: process.env.GITHUB_APP_PRIVATE_KEY!.replace(/\\n/g, '\n'),
+        });
+        const appTokenAuth = await appAuth({ type: 'app' });
+        
+        const installationResponse = await fetch(
+          `https://api.github.com/app/installations/${installationId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${appTokenAuth.token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          }
+        );
+
+        if (installationResponse.ok) {
+          const installationData = await installationResponse.json();
+          const githubLogin = installationData.account?.login;
+
+          logger.info('🔍 Installation account found', { githubLogin });
+
+          if (githubLogin) {
+            // Look up user by their GitHub username
+            const { data: user } = await supabaseAdmin
+              .from('users')
+              .select('id')
+              .eq('github_username', githubLogin)
+              .single();
+
+            if (user) {
+              userId = user.id;
+              if (userId) { // Ensure userId is defined before using it
+                logger.info('✅ User resolved via GitHub username fallback', {
+                  userId: userId.substring(0, 8) + '...',
+                  githubLogin,
+                });
+              }
+            }
+          }
+        }
+      } catch (lookupError) {
+        logger.error('GitHub account lookup failed', { error: String(lookupError) });
+      }
+    }
+
+    if (!userId) {
+      logger.error('❌ Cannot determine user – no cookie AND GitHub lookup failed');
+      return NextResponse.redirect(new URL('/?error=not_authenticated', request.url));
+    }
+
+    // ─── Step 2: Fetch repos from the installation ─────────────────
     const octokit = await createInstallationClient(Number(installationId));
 
-    // Get list of repositories from the installation
     const reposResponse = await octokit.request('GET /installation/repositories');
     const reposData = reposResponse.data;
 
@@ -52,22 +102,18 @@ export async function GET(request: NextRequest) {
       total_count: reposData.total_count,
       repo_count: reposData.repositories.length,
       repo_names: reposData.repositories.map((r: any) => r.full_name),
-      raw_response_keys: Object.keys(reposData)
     });
 
     // Get installation token for storage
     const auth: any = await octokit.auth({ type: 'installation' });
     const encryptedToken = await encryptToken(auth.token);
 
-    // For each repository, create an installation record
+    // ─── Step 3: Store each repo ───────────────────────────────────
     for (const repo of reposData.repositories) {
       const repoOwner = repo.owner.login;
       const repoName = repo.name;
 
-      logger.info(`📝 Processing repo loop: ${repoOwner}/${repoName}`, {
-        id: repo.id,
-        private: repo.private
-      });
+      logger.info(`📝 Processing repo: ${repoOwner}/${repoName}`);
 
       // Check if installation already exists
       const { data: existing } = await supabaseAdmin
@@ -80,14 +126,10 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existing) {
-        logger.info(`⏭️ Installation already exists for ${repoOwner}/${repoName}`);
-        
-        // Even if installation exists, we might want to trigger auto-deploy if no vercel project exists
+        logger.info(`⏭️ Already exists: ${repoOwner}/${repoName}`);
+        // Still try auto-deploy in background if needed
         try {
-          logger.info(`🚀 Checking auto-deployment for existing repo ${repoOwner}/${repoName}`);
-          
           const autoDeployService = new VercelAutoDeployService();
-          // Run in background
           autoDeployService.autoDeployRepository({
             userId,
             githubInstallationId: existing.id,
@@ -95,14 +137,11 @@ export async function GET(request: NextRequest) {
             repoOwner,
             repoName,
           }).catch(err => logger.error('Background auto-deploy failed', { error: String(err) }));
-        } catch (e) {
-          // ignore
-        }
-        
+        } catch (e) { /* ignore */ }
         continue;
       }
 
-      // Store installation in database
+      // Insert new installation record
       const { data: installationRecord, error: insertError } = await supabaseAdmin
         .from('github_installations')
         .insert({
@@ -117,20 +156,15 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (insertError || !installationRecord) {
-        logger.error('Failed to store installation', { error: insertError });
+        logger.error(`Failed to store ${repoOwner}/${repoName}`, { error: insertError });
         continue;
       }
 
-      logger.info('✅ GitHub installation stored', {
-        repo: `${repoOwner}/${repoName}`,
-      });
+      logger.info(`✅ Stored: ${repoOwner}/${repoName}`);
 
-      // 🚀 Auto-deploy to Vercel!
+      // Auto-deploy in background
       try {
-        logger.info(`🚀 Starting auto-deployment for ${repoOwner}/${repoName}`);
-
         const autoDeployService = new VercelAutoDeployService();
-        // Run in background (don't await) to allow fast redirect
         autoDeployService.autoDeployRepository({
           userId,
           githubInstallationId: installationRecord.id,
@@ -138,28 +172,39 @@ export async function GET(request: NextRequest) {
           repoOwner,
           repoName,
         }).then((result: any) => {
-          logger.info('✅ Background auto-deployment successful', {
-            repo: `${repoOwner}/${repoName}`,
+          logger.info(`✅ Auto-deployed: ${repoOwner}/${repoName}`, {
             vercelProjectId: result.vercelProjectId,
           });
         }).catch((deployError: any) => {
-          logger.error('Background auto-deployment failed', {
+          logger.error(`Auto-deploy failed: ${repoOwner}/${repoName}`, {
             error: String(deployError),
-            repo: `${repoOwner}/${repoName}`,
           });
         });
-
       } catch (deployError) {
-        logger.error('Auto-deployment trigger failed', {
-          error: String(deployError),
-          repo: `${repoOwner}/${repoName}`,
-        });
+        logger.error('Auto-deploy trigger error', { error: String(deployError) });
       }
     }
 
-    // Redirect to dashboard
+    // ─── Step 4: Redirect to dashboard ─────────────────────────────
     logger.info('🎉 Installation complete, redirecting to dashboard');
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    
+    // Build redirect response and re-set the cookie to ensure it's fresh
+    const url = new URL(request.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    const response = NextResponse.redirect(new URL('/dashboard', request.url));
+    
+    // Re-set the cookie on this response so the dashboard will definitely have it
+    const protocol = request.headers.get('x-forwarded-proto') || url.protocol;
+    const isSecure = protocol.includes('https');
+    response.cookies.set('user_id', userId, {
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    
+    return response;
   } catch (error) {
     logger.error('GitHub installation callback error', { error: String(error) });
     return NextResponse.redirect(new URL('/?error=installation_failed', request.url));
