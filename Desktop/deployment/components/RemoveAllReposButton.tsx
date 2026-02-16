@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { deleteAllRepos } from '@/app/actions/delete-repos';
 
 export function RemoveAllReposButton() {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -12,19 +13,16 @@ export function RemoveAllReposButton() {
     setIsDeleting(true);
     
     try {
-      const response = await fetch('/api/repos', {
-        method: 'DELETE',
-        credentials: 'include', // Ensure cookies are sent (fixes 401)
-      });
+      // Use Server Action — this runs server-side and reads cookies
+      // directly via next/headers, bypassing browser cookie issues
+      const result = await deleteAllRepos();
 
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(data.message || 'All repositories removed successfully!');
+      if (result.success) {
+        alert(result.message || 'All repositories removed successfully!');
         router.refresh();
         setShowConfirm(false);
       } else {
-        alert(`Failed to remove repositories: ${data.error}`);
+        alert(`Failed to remove repositories: ${result.error || result.message}`);
       }
     } catch (error) {
       alert('An error occurred while removing repositories');
