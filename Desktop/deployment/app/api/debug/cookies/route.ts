@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
-  const userId = request.cookies.get('user_id');
-  const allCookies = request.cookies.getAll();
-
+  const cookies = request.cookies.getAll();
+  const headers = Object.fromEntries(request.headers.entries());
+  
   return NextResponse.json({
-    authenticated: !!userId,
-    userId: userId?.value || null,
-    allCookies: allCookies.map(c => ({ name: c.name, hasValue: !!c.value })),
+    message: 'Cookie Debugger',
+    cookies,
     headers: {
-      cookie: request.headers.get('cookie'),
-      userAgent: request.headers.get('user-agent'),
+      cookie: headers.cookie,
+      authorization: headers.authorization,
+      host: headers.host,
+      origin: headers.origin,
+      referer: headers.referer,
     },
+    url: request.url,
+    nextUrl: {
+      protocol: request.nextUrl.protocol,
+      hostname: request.nextUrl.hostname,
+      basePath: request.nextUrl.basePath,
+    }
   });
 }

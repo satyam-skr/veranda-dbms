@@ -112,7 +112,9 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(`${baseUrl}/dashboard`);
     
-    const isSecure = url.protocol === 'https:';
+    // Check protocol reliably (Vercel uses X-Forwarded-Proto)
+    const protocol = request.headers.get('x-forwarded-proto') || url.protocol;
+    const isSecure = protocol.includes('https');
     
     // Approach 1: Standard session cookie
     response.cookies.set('user_id', user.id, {
