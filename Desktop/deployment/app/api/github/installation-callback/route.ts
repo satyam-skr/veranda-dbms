@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase';
 import { createInstallationClient } from '@/lib/github';
 import { encryptToken } from '@/lib/encryption';
@@ -20,11 +21,18 @@ export async function GET(request: NextRequest) {
       setupAction,
     });
 
-    // Get user ID from cookie
-    const userId = request.cookies.get('user_id')?.value;
+    // Get user ID from cookie — try both methods for reliability
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+
+    logger.info('🍪 Cookie check in installation callback', {
+      userId: userId ? `${userId.substring(0, 8)}...` : 'MISSING',
+      cookieStoreNames: cookieStore.getAll().map(c => c.name),
+      requestCookieNames: request.cookies.getAll().map(c => c.name),
+    });
 
     if (!userId) {
-      logger.error('No user_id cookie found');
+      logger.error('No user_id cookie found in installation callback');
       return NextResponse.redirect(new URL('/?error=not_authenticated', request.url));
     }
 
