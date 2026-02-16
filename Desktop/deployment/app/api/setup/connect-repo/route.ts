@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase';
-import { githubApp } from '@/lib/github';
+import { createInstallationClient } from '@/lib/github';
 import { encryptToken } from '@/lib/encryption';
 import { VercelAutoDeployService } from '@/lib/vercel-auto-deploy';
+import { createAppAuth } from '@octokit/auth-app';
 import { logger } from '@/utils/logger';
 
 const schema = z.object({
@@ -30,15 +31,19 @@ export async function POST(request: NextRequest) {
 
     const { installationId, repoOwner, repoName } = validation.data;
 
-    // Get installation token
-    const { token, expiresAt } = await githubApp.getInstallationOctokit(installationId).then(async (octokit) => {
-      // Get the authentication details
-      const auth:any = await octokit.auth({ type: 'installation' });
-      return {
-        token: auth.token,
-        expiresAt: auth.expiresAt,
-      };
+    // Get installation token using GitHub App credentials
+    const auth = createAppAuth({
+      appId: process.env.GITHUB_APP_ID!,
+      privateKey: process.env.GITHUB_APP_PRIVATE_KEY!.replace(/\\n/g, '\n'),
     });
+
+    const installationAuth = await auth({
+      type: 'installation',
+      installationId,
+    });
+
+    const token = installationAuth.token;
+    const expiresAt = installationAuth.expiresAt;
 
     // Encrypt installation token
     const encryptedToken = await encryptToken(token);

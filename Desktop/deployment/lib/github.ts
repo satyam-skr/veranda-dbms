@@ -1,15 +1,17 @@
 import { Octokit } from '@octokit/rest';
-import { App } from '@octokit/app';
+// import { App } from '@octokit/app';
 import { createAppAuth } from '@octokit/auth-app';
 
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID!;
 const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY!.replace(/\\n/g, '\n');
+console.log("🔑 Key Formatted: Length", GITHUB_APP_PRIVATE_KEY.length);
 
 // Create GitHub App instance (kept for backward compatibility if needed)
-export const githubApp = new App({
-  appId: GITHUB_APP_ID,
-  privateKey: GITHUB_APP_PRIVATE_KEY,
-});
+// Create GitHub App instance (kept for backward compatibility if needed)
+// export const githubApp = new App({
+//   appId: GITHUB_APP_ID,
+//   privateKey: GITHUB_APP_PRIVATE_KEY,
+// });
 
 /**
  * Create an Octokit instance with installation token

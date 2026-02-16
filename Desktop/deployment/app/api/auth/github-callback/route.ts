@@ -112,21 +112,22 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(`${baseUrl}/dashboard`);
     
-    // Try multiple cookie approaches to see which works
-    // Approach 1: sameSite none
+    const isSecure = url.protocol === 'https:';
+    
+    // Approach 1: Standard session cookie
     response.cookies.set('user_id', user.id, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: isSecure, // Only secure in production/https
+      sameSite: 'lax',  // reliable default
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     });
 
-    // Approach 2: Also try a debug cookie without httpOnly
+    // Approach 2: Debug cookie
     response.cookies.set('user_id_debug', user.id, {
-      httpOnly: false, // Visible in JS for debugging
-      secure: true,
-      sameSite: 'none',
+      httpOnly: false,
+      secure: isSecure,
+      sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     });

@@ -11,6 +11,7 @@ export async function DELETE(request: NextRequest) {
     const userId = request.cookies.get('user_id')?.value;
 
     if (!userId) {
+      console.log('[DeleteRepos] Cookies received:', request.cookies.getAll().map(c => `${c.name}=${c.value.substring(0, 10)}...`));
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

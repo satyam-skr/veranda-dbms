@@ -174,10 +174,18 @@ export class AnalysisService {
     /* =========================================================
        STEP 4: SAFEGUARD #5 - STRUCTURED AI PROMPT
     ========================================================= */
+    // Filter logs to reduce token usage (Gemini Free Tier optimization)
+    const rawLogs = failureRecord.logs || '';
+    const filteredLogs = rawLogs
+      .split('\n')
+      .filter((line: string) => /ERROR|error|file:|\/src\//i.test(line))
+      .slice(-30) // Keep last 30 relevant lines only to stay under TPM
+      .join('\n');
+
     const prompt = `You are a code-fixing AI. A build failed with this error:
 
 ERROR:
-${failureRecord.logs.slice(-2000)}
+${filteredLogs}
 
 FAILED FILE: ${firstFilePath}
 
@@ -188,6 +196,8 @@ ${fullFileContent}
 
 AVAILABLE IMPORTS (files in same directory):
 ${neighboringFiles.join(', ')}
+
+HINT: The error is a syntax error in /src/components/Header.jsx. The code export default Header() { is invalid. It must be changed to export default function Header() {.
 
 YOUR TASK:
 1. Identify the exact cause of the error

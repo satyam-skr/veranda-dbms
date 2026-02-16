@@ -4,10 +4,12 @@ export async function GET(request: NextRequest) {
   // Simple test: set a cookie and redirect to dashboard
   const response = NextResponse.redirect(new URL('/dashboard', request.url));
   
+  const isSecure = new URL(request.url).protocol === 'https:';
+
   // Set test cookie
   response.cookies.set('user_id', 'test-user-123', {
     httpOnly: true,
-    secure: true,
+    secure: isSecure,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60,

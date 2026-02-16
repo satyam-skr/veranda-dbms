@@ -78,6 +78,10 @@ export async function autonomousFixLoop(
   console.log(`🔧 Project: ${project.project_name}`);
   console.log('🔧'.repeat(40));
 
+  // Throttling: Wait 5s before starting to clear Token Bucket (Gemini Free Tier)
+  console.log('⏳ [AutoFix] Waiting 5s for API Token Bucket reset...');
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
   let currentFailureId = failureRecordId;
   let lockAcquired = false;
 
@@ -152,9 +156,13 @@ export async function autonomousFixLoop(
         return;
       }
 
+      try {
       await supabaseAdmin
         .from('failure_records')
-        .update({ error_signature: errorSignature })
+        .update({ 
+          error_signature: errorSignature,
+          status: 'analyzing'
+        })
         .eq('id', currentFailureId);
 
       /* ----------------------------------------------------
@@ -170,6 +178,12 @@ export async function autonomousFixLoop(
         const reason = 'ai_analysis_failed';
         failureReasons.push(reason);
         logger.warn(`[AutoFix] Retry ${attempt}/${MAX_RETRIES} — reason: ${reason}`);
+        
+        // Update status so UI doesn't show stuck 'analyzing'
+        await supabaseAdmin
+          .from('failure_records')
+          .update({ status: 'pending_analysis' })
+          .eq('id', currentFailureId);
         
         // Early exit if same failure repeats 3 times
         const lastThree = failureReasons.slice(-3);
@@ -193,6 +207,13 @@ export async function autonomousFixLoop(
         const reason = 'empty_fixes_filtered';
         failureReasons.push(reason);
         logger.warn(`[AutoFix] Retry ${attempt}/${MAX_RETRIES} — reason: ${reason}`);
+        
+        // Update status so UI doesn't show stuck 'analyzing'
+        await supabaseAdmin
+          .from('failure_records')
+          .update({ status: 'pending_analysis' })
+          .eq('id', currentFailureId);
+        
         continue;
       }
 
@@ -344,6 +365,22 @@ export async function autonomousFixLoop(
       }
 
       currentFailureId = newFailure.id;
+      } catch (attemptError) {
+        // Catch any uncaught error in the retry body so status doesn't stay stuck
+        logger.error(`[AutoFix] Attempt ${attempt} crashed`, {
+          error: String(attemptError),
+          stack: attemptError instanceof Error ? attemptError.stack : undefined,
+        });
+        failureReasons.push('attempt_crashed');
+        
+        // Reset status from 'analyzing' so UI doesn't show stuck
+        await supabaseAdmin
+          .from('failure_records')
+          .update({ status: 'pending_analysis' })
+          .eq('id', currentFailureId);
+        
+        continue;
+      }
     }
 
     // 🚨 CRITICAL: If we reach here, max retries exhausted without success

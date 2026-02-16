@@ -14,6 +14,7 @@ export function RemoveAllReposButton() {
     try {
       const response = await fetch('/api/repos', {
         method: 'DELETE',
+        credentials: 'include', // Ensure cookies are sent (fixes 401)
       });
 
       const data = await response.json();
