@@ -12,19 +12,17 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
+    const installationId = searchParams.get('installation_id');
 
-    logger.info('OAuth code received', { hasCode: !!code });
-
-    // DETECT MISCONFIGURATION:
-    // If this endpoint receives 'installation_id' but no 'code', it means the GitHub App
-    // 'Setup URL' is pointing here by mistake. Forward it to the correct handler.
-    if (!code && searchParams.has('installation_id')) {
-      logger.warn('⚠️ Forwarding misdirected installation callback', {
+    // DETECT & FORWARD MISDIRECTED INSTALLATION CALLBACKS
+    // 1. If 'setup_action' is present, it is definitely an installation callback.
+    // 2. If 'installation_id' is present but NO 'code', it is an installation callback sent to the wrong URL.
+    if (installationId && (searchParams.has('setup_action') || !code)) {
+      logger.warn('⚠️ Forwarding confirmed installation callback to correct handler', {
         params: searchParams.toString()
       });
       const url = new URL(request.url);
       const baseUrl = `${url.protocol}//${url.host}`;
-      // Construct the correct URL preserving all params
       return NextResponse.redirect(`${baseUrl}/api/github/installation-callback?${searchParams.toString()}`);
     }
 

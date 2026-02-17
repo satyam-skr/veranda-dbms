@@ -13,17 +13,19 @@ import { VercelAutoDeployService } from '@/lib/vercel-auto-deploy';
  *
  * PRODUCTION FIX: On Vercel, the browser may not send the `user_id` cookie
  * when GitHub redirects back (cross-origin navigation + cookie security policies).
- * As a fallback, we look up the user by the GitHub account that owns the repos.
+ * To fix this, we pass `state={userId}` to GitHub, which returns it here.
  */
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const installationId = searchParams.get('installation_id');
     const setupAction = searchParams.get('setup_action');
+    const state = searchParams.get('state');
 
     logger.info('🔵 GitHub App installation callback', {
       installationId,
       setupAction,
+      state
     });
 
     if (!installationId) {
@@ -32,12 +34,25 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Step 1: Resolve user ID ───────────────────────────────────
-    // Try cookie first, then fall back to looking up user by GitHub account
+    // Priority: 1. State param (Passed securely from connect page)
+    //           2. Cookie (Fallback)
+    //           3. GitHub Account Lookup (Last resort)
+    
     const cookieStore = await cookies();
-    let userId = cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+    let userId = state || cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+
+    if (userId === 'undefined' || userId === 'null') {
+        userId = undefined;
+    }
+
+    if (state) {
+        logger.info('✅ User ID recovered from state param', { userId });
+    } else {
+        logger.warn('⚠️ No state param returned from GitHub - relying on cookies/lookup');
+    }
 
     if (!userId) {
-      logger.warn('🍪 No cookie – attempting GitHub account lookup fallback');
+      logger.warn('🍪 No cookie or state – attempting GitHub account lookup fallback');
 
       // Use App-level auth to get installation details (who installed it)
       try {
@@ -88,7 +103,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId) {
-      logger.error('❌ Cannot determine user – no cookie AND GitHub lookup failed');
+      logger.error('❌ Cannot determine user – no state, no cookie AND GitHub lookup failed');
       return NextResponse.redirect(new URL('/?error=not_authenticated', request.url));
     }
 
@@ -196,13 +211,17 @@ export async function GET(request: NextRequest) {
     // Re-set the cookie on this response so the dashboard will definitely have it
     const protocol = request.headers.get('x-forwarded-proto') || url.protocol;
     const isSecure = protocol.includes('https');
-    response.cookies.set('user_id', userId, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    
+    // If we recovered the ID from state, make sure we plant it as a cookie again
+    if (userId) {
+        response.cookies.set('user_id', userId, {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30,
+        });
+    }
     
     return response;
   } catch (error) {

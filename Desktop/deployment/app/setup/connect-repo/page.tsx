@@ -1,12 +1,17 @@
-'use client';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-export default function ConnectRepoPage() {
-  const handleConnect = () => {
-    // Redirect to GitHub App installation
-    // Use select_target to force repo selection
-    const githubAppUrl = 'https://github.com/apps/autofix-arkin26/installations/select_target';
-    window.location.href = githubAppUrl;
-  };
+export default async function ConnectRepoPage() {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('user_id')?.value;
+
+  if (!userId) {
+    redirect('/');
+  }
+
+  // Pass user_id in 'state' param so it survives the round-trip to GitHub
+  // This fixes the issue where cookies are lost during cross-site redirects
+  const githubAppUrl = `https://github.com/apps/autofix-arkin26/installations/select_target?state=${userId}`;
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -31,12 +36,12 @@ export default function ConnectRepoPage() {
           </li>
         </ul>
 
-        <button
-          onClick={handleConnect}
-          className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+        <a
+          href={githubAppUrl}
+          className="block w-full text-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
         >
           Install GitHub App
-        </button>
+        </a>
 
         <p className="text-sm text-gray-500 mt-4 text-center">
           You'll be redirected to GitHub to authorize the installation
