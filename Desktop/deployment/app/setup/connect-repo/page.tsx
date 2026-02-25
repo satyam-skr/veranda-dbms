@@ -1,16 +1,41 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function ConnectRepoPage() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('user_id')?.value;
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function ConnectRepoPage() {
+  const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get user_id from cookie (client-side)
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
+      return null;
+    };
+
+    const id = getCookie('user_id');
+    if (!id) {
+      router.push('/');
+      return;
+    }
+
+    setUserId(id);
+    // Persist to localStorage as a safety net for cross-site redirects
+    localStorage.setItem('autofix_user_id', id);
+  }, [router]);
 
   if (!userId) {
-    redirect('/');
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   // Pass user_id in 'state' param so it survives the round-trip to GitHub
-  // This fixes the issue where cookies are lost during cross-site redirects
   const githubAppUrl = `https://github.com/apps/autofix-arkin26/installations/select_target?state=${userId}`;
 
   return (

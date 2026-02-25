@@ -14,18 +14,28 @@ export default function SetupCallbackPage() {
   useEffect(() => {
     const installationId = searchParams.get('installation_id');
     const setupAction = searchParams.get('setup_action');
-    const state = searchParams.get('state');
+    let state = searchParams.get('state');
+
+    // 🛡️ RECOVERY: If state is missing, try to get it from localStorage
+    if (!state || state === 'undefined' || state === 'null') {
+      state = localStorage.getItem('autofix_user_id');
+      console.log('🛡️ Session recovered from localStorage:', state);
+    }
 
     // Debug info
     const paramsObj = Object.fromEntries(searchParams.entries());
-    setParamsDebug(JSON.stringify(paramsObj, null, 2));
+    setParamsDebug(JSON.stringify({ ...paramsObj, recovered_state: state }, null, 2));
 
     if (installationId) {
       setStatus('redirecting');
       
-      // Construct redirection URL to API
-      // We use window.location to ensure a full page reload and clean state
-      const apiUrl = `/api/github/installation-callback?${searchParams.toString()}`;
+      // Construct redirection URL to API with the recovered state
+      const nextParams = new URLSearchParams(searchParams.toString());
+      if (state && !nextParams.has('state')) {
+        nextParams.set('state', state);
+      }
+      
+      const apiUrl = `/api/github/installation-callback?${nextParams.toString()}`;
       window.location.href = apiUrl;
     } else {
       setStatus('error');

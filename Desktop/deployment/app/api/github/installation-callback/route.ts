@@ -34,21 +34,27 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Step 1: Resolve user ID ───────────────────────────────────
-    // Priority: 1. State param (Passed securely from connect page)
+    // Priority: 1. State param (Passed securely from connect page / recovered from localStorage)
     //           2. Cookie (Fallback)
     //           3. GitHub Account Lookup (Last resort)
     
     const cookieStore = await cookies();
-    let userId = state || cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+    const cookieUserId = cookieStore.get('user_id')?.value || request.cookies.get('user_id')?.value;
+    
+    let userId = state || cookieUserId;
 
-    if (userId === 'undefined' || userId === 'null') {
+    if (userId === 'undefined' || userId === 'null' || !userId) {
         userId = undefined;
     }
 
-    if (state) {
-        logger.info('✅ User ID recovered from state param', { userId });
-    } else {
-        logger.warn('⚠️ No state param returned from GitHub - relying on cookies/lookup');
+    logger.info('🔍 Resolving user session', {
+      passedState: state,
+      cookieUserId: cookieUserId ? `${cookieUserId.substring(0, 8)}...` : 'missing',
+      finalUserId: userId ? `${userId.substring(0, 8)}...` : 'NOT FOUND'
+    });
+
+    if (state && state !== cookieUserId) {
+        logger.info('✅ Using userId from state parameter', { userId });
     }
 
     if (!userId) {
@@ -104,7 +110,12 @@ export async function GET(request: NextRequest) {
 
     if (!userId) {
       logger.error('❌ Cannot determine user – no state, no cookie AND GitHub lookup failed');
-      return NextResponse.redirect(new URL('/?error=not_authenticated', request.url));
+      const debugInfo = encodeURIComponent(JSON.stringify({ 
+        hasState: !!state, 
+        hasCookie: !!cookieUserId,
+        stateVal: state ? 'present' : 'missing'
+      }));
+      return NextResponse.redirect(new URL(`/?error=not_authenticated&debug=${debugInfo}`, request.url));
     }
 
     // ─── Step 2: Fetch repos from the installation ─────────────────
@@ -208,18 +219,28 @@ export async function GET(request: NextRequest) {
     const baseUrl = `${url.protocol}//${url.host}`;
     const response = NextResponse.redirect(new URL('/dashboard', request.url));
     
-    // Re-set the cookie on this response so the dashboard will definitely have it
-    const protocol = request.headers.get('x-forwarded-proto') || url.protocol;
-    const isSecure = protocol.includes('https');
-    
     // If we recovered the ID from state, make sure we plant it as a cookie again
     if (userId) {
+        // PRODUCTION FIX: Ensure Secure is true on Vercel/Production
+        const host = request.headers.get('host') || '';
+        const isProd = !host.includes('localhost');
+        const secure = isProd;
+
         response.cookies.set('user_id', userId, {
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30,
+          httpOnly: true,
+          secure: secure,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24 * 30, // 30 days
+        });
+
+        // Debug cookie (non-httpOnly) to verify if it's arriving
+        response.cookies.set('user_id_check', 'present', {
+          httpOnly: false,
+          secure: secure,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24,
         });
     }
     

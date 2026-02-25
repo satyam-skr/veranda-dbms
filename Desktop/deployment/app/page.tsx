@@ -1,13 +1,46 @@
-import Link from 'next/link';
-import { getBaseUrl } from '@/lib/get-base-url';
+'use client';
 
-export default async function LandingPage() {
-  const baseUrl = await getBaseUrl();
-  const githubOAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${baseUrl}/api/auth/github-callback&scope=read:user user:email`;
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+
+function LandingContent() {
+  const searchParams = useSearchParams();
+  const error = searchParams.get('error');
+  const debug = searchParams.get('debug');
+  
+  const githubOAuthUrl = `https://github.com/login/oauth/authorize?client_id=Ov23li0wNOGu77yx3N2m&scope=read:user user:email`;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
       <div className="max-w-6xl mx-auto px-4 py-20">
+        {/* Error Notifications */}
+        {error && (
+          <div className="mb-8 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-lg">
+            <p className="font-bold">Authentication Error</p>
+            <p className="text-sm">We couldn't verify your session. This often happens due to browser security settings.</p>
+            {debug && (
+              <pre className="mt-2 p-2 bg-red-50 rounded text-xs overflow-auto">
+                Debug Info: {debug}
+              </pre>
+            )}
+            <div className="mt-4 flex gap-4">
+              <Link href="/api/debug/session" className="text-sm font-semibold underline">
+                View Session Diagnostic
+              </Link>
+              <button 
+                onClick={() => {
+                  localStorage.clear();
+                  window.location.href = '/';
+                }}
+                className="text-sm font-semibold underline"
+              >
+                Reset All Session Data
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Hero Section */}
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-3 mb-6">
@@ -109,5 +142,13 @@ export default async function LandingPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
+      <LandingContent />
+    </Suspense>
   );
 }

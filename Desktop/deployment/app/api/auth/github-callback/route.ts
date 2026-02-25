@@ -125,15 +125,16 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(`${baseUrl}/dashboard`);
     
-    // Check protocol reliably (Vercel uses X-Forwarded-Proto)
-    const protocol = request.headers.get('x-forwarded-proto') || url.protocol;
-    const isSecure = protocol.includes('https');
+    // Check protocol reliably
+    const host = request.headers.get('host') || '';
+    const isProd = !host.includes('localhost');
+    const secure = isProd;
     
     // Approach 1: Standard session cookie
     response.cookies.set('user_id', user.id, {
       httpOnly: true,
-      secure: isSecure, // Only secure in production/https
-      sameSite: 'lax',  // reliable default
+      secure: secure,
+      sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     });
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     // Approach 2: Debug cookie
     response.cookies.set('user_id_debug', user.id, {
       httpOnly: false,
-      secure: isSecure,
+      secure: secure,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
