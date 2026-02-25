@@ -223,4 +223,139 @@ export class FixService {
       return null;
     }
   }
+
+  /**
+   * Generic method to modify a file in a repository
+   */
+  async modifyFile(
+    installationId: number,
+    owner: string,
+    repo: string,
+    path: string,
+    content: string,
+    message: string,
+    branch?: string
+  ): Promise<{ branchName: string; sha: string } | null> {
+    try {
+      const octokit = await createInstallationClient(installationId);
+
+      const { data: repoData } = await octokit.rest.repos.get({
+        owner,
+        repo,
+      });
+
+      const defaultBranch = repoData.default_branch || 'main';
+      let targetBranch = branch || defaultBranch;
+
+      // Ensure branch exists or create it from default
+      try {
+        await octokit.rest.repos.getBranch({
+          owner,
+          repo,
+          branch: targetBranch,
+        });
+      } catch (e: any) {
+        if (e.status === 404 && branch) {
+          // Create new branch from default
+          const { data: defaultBranchRef } = await octokit.rest.git.getRef({
+            owner,
+            repo,
+            ref: `heads/${defaultBranch}`,
+          });
+
+          await octokit.rest.git.createRef({
+            owner,
+            repo,
+            ref: `refs/heads/${targetBranch}`,
+            sha: defaultBranchRef.object.sha,
+          });
+          logger.info('Created new branch for modification', { targetBranch });
+        } else {
+          throw e; // Reraise if not 404 or if we didn't specify a branch
+        }
+      }
+
+      // Get current file if it exists to get the SHA
+      let currentSha: string | undefined;
+      try {
+        const { data: currentFile } = await octokit.rest.repos.getContent({
+          owner,
+          repo,
+          path,
+          ref: targetBranch,
+        });
+        if ('sha' in currentFile) {
+          currentSha = currentFile.sha;
+        }
+      } catch (e) {
+        // file might not exist (new file), that's fine
+      }
+
+      const { data: result } = await octokit.rest.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path,
+        message,
+        content: Buffer.from(content).toString('base64'),
+        branch: targetBranch,
+        ...(currentSha ? { sha: currentSha } : {}),
+      });
+
+      return {
+        branchName: targetBranch,
+        sha: result.commit.sha!,
+      };
+    } catch (error) {
+      logger.error('Failed to modify file', { error: String(error), path, repo });
+      return null;
+    }
+  }
+
+  async createPullRequest(
+    installationId: number,
+    owner: string,
+    repo: string,
+    branchName: string,
+    title: string,
+    body: string,
+    base: string = 'main'
+  ): Promise<string | null> {
+    try {
+      logger.info('Creating Pull Request', { owner, repo, branchName, title });
+
+      const octokit = await createInstallationClient(installationId);
+
+      // Check if base branch exists, fallback to repo default if not provided/found
+      let baseBranch = base;
+      try {
+        const { data: repoData } = await octokit.rest.repos.get({
+          owner,
+          repo,
+        });
+        baseBranch = base || repoData.default_branch || 'main';
+      } catch (e) {
+        logger.warn('Failed to fetch repo default branch, using base', { base });
+      }
+
+      const { data: pr } = await octokit.rest.pulls.create({
+        owner,
+        repo,
+        title,
+        body,
+        head: branchName,
+        base: baseBranch,
+      });
+
+      logger.info('Pull Request created successfully', { prUrl: pr.html_url });
+      return pr.html_url;
+    } catch (error) {
+      logger.error('Failed to create Pull Request', {
+        error: String(error),
+        owner,
+        repo,
+        branchName,
+      });
+      return null;
+    }
+  }
 }
