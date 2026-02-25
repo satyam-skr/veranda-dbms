@@ -13,33 +13,55 @@ function DashboardContent() {
   const [repos, setRepos] = useState<any[]>([]);
   const [recentFailures, setRecentFailures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ count: number; error?: string } | null>(null);
 
   const success = searchParams.get('success');
   const fail = searchParams.get('fail');
   const lastError = searchParams.get('last_error');
   const empty = searchParams.get('empty');
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [reposRes, failuresRes] = await Promise.all([
-          fetch('/api/repos'),
-          fetch('/api/failures')
-        ]);
-        
-        const reposData = await reposRes.json();
-        const failuresData = await failuresRes.json();
-        
-        setRepos(reposData.repos || []);
-        setRecentFailures((failuresData.failures || []).slice(0, 10));
-      } catch (err) {
-        console.error('Fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchData = async () => {
+    try {
+      const [reposRes, failuresRes] = await Promise.all([
+        fetch('/api/repos'),
+        fetch('/api/failures')
+      ]);
+      
+      const reposData = await reposRes.json();
+      const failuresData = await failuresRes.json();
+      
+      setRepos(reposData.repos || []);
+      setRecentFailures((failuresData.failures || []).slice(0, 10));
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/repos/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSyncResult({ count: data.syncedCount });
+        await fetchData(); // Refresh list
+      } else {
+        setSyncResult({ count: 0, error: data.error || 'Sync failed' });
+      }
+    } catch (err) {
+      setSyncResult({ count: 0, error: 'Network error during sync' });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -53,6 +75,16 @@ function DashboardContent() {
     <>
       <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Sync Results */}
+        {syncResult && (
+          <div className={`mb-8 p-4 rounded-lg border-l-4 ${syncResult.error ? 'bg-red-50 border-red-500 text-red-800' : 'bg-green-50 border-green-500 text-green-800'}`}>
+            <p className="font-bold">{syncResult.error ? 'Sync Failed' : 'Sync Successful'}</p>
+            <p className="text-sm">
+              {syncResult.error ? syncResult.error : `Successfully synchronized ${syncResult.count} repository connections from GitHub.`}
+            </p>
+          </div>
+        )}
+
         {/* Debug Alerts */}
         {(success || fail || empty) && (
           <div className={`mb-8 p-4 rounded-lg border-l-4 ${fail || empty ? 'bg-yellow-50 border-yellow-500 text-yellow-800' : 'bg-green-50 border-green-500 text-green-800'}`}>
@@ -80,6 +112,20 @@ function DashboardContent() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Connected Repositories</h2>
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+              >
+                {syncing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                    Syncing...
+                  </>
+                ) : (
+                  <>🔄 Sync Repos</>
+                )}
+              </button>
               {repos && repos.length > 0 && <RemoveAllReposButton />}
               <Link
                 href="/setup/connect-repo"
