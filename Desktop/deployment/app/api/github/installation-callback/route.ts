@@ -135,6 +135,10 @@ export async function GET(request: NextRequest) {
     const encryptedToken = await encryptToken(auth.token);
 
     // ─── Step 3: Store each repo ───────────────────────────────────
+    let successCount = 0;
+    let failCount = 0;
+    let lastError = '';
+
     for (const repo of reposData.repositories) {
       const repoOwner = repo.owner.login;
       const repoName = repo.name;
@@ -153,17 +157,7 @@ export async function GET(request: NextRequest) {
 
       if (existing) {
         logger.info(`⏭️ Already exists: ${repoOwner}/${repoName}`);
-        // Still try auto-deploy in background if needed
-        try {
-          const autoDeployService = new VercelAutoDeployService();
-          autoDeployService.autoDeployRepository({
-            userId,
-            githubInstallationId: existing.id,
-            installationId: Number(installationId),
-            repoOwner,
-            repoName,
-          }).catch(err => logger.error('Background auto-deploy failed', { error: String(err) }));
-        } catch (e) { /* ignore */ }
+        successCount++;
         continue;
       }
 
@@ -183,9 +177,12 @@ export async function GET(request: NextRequest) {
 
       if (insertError || !installationRecord) {
         logger.error(`Failed to store ${repoOwner}/${repoName}`, { error: insertError });
+        failCount++;
+        lastError = insertError?.message || 'Insert returned no data';
         continue;
       }
 
+      successCount++;
       logger.info(`✅ Stored: ${repoOwner}/${repoName}`);
 
       // Auto-deploy in background
@@ -214,10 +211,15 @@ export async function GET(request: NextRequest) {
     // ─── Step 4: Redirect to dashboard ─────────────────────────────
     logger.info('🎉 Installation complete, redirecting to dashboard');
     
-    // Build redirect response and re-set the cookie to ensure it's fresh
-    const url = new URL(request.url);
-    const baseUrl = `${url.protocol}//${url.host}`;
-    const response = NextResponse.redirect(new URL('/dashboard', request.url));
+    // Build redirect response with debug info if needed
+    const debugParams = new URLSearchParams();
+    debugParams.set('success', String(successCount));
+    debugParams.set('fail', String(failCount));
+    if (lastError) debugParams.set('last_error', lastError);
+    if (reposData.repositories.length === 0) debugParams.set('empty', 'true');
+
+    const redirectUrl = new URL(`/dashboard?${debugParams.toString()}`, request.url);
+    const response = NextResponse.redirect(redirectUrl);
     
     // If we recovered the ID from state, make sure we plant it as a cookie again
     if (userId) {

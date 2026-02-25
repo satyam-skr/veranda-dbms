@@ -1,84 +1,72 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { RepoCard } from '@/components/RepoCard';
 import { FailureCard } from '@/components/FailureCard';
 import { RemoveAllReposButton } from '@/components/RemoveAllReposButton';
 import Link from 'next/link';
-import { getBaseUrl } from '@/lib/get-base-url';
 
-async function getRepos() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('user_id');
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const [repos, setRepos] = useState<any[]>([]);
+  const [recentFailures, setRecentFailures] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!userId) {
-    return null;
-  }
+  const success = searchParams.get('success');
+  const fail = searchParams.get('fail');
+  const lastError = searchParams.get('last_error');
+  const empty = searchParams.get('empty');
 
-  try {
-    const baseUrl = await getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/repos`, {
-      headers: {
-        Cookie: `user_id=${userId.value}`,
-      },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return null;
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [reposRes, failuresRes] = await Promise.all([
+          fetch('/api/repos'),
+          fetch('/api/failures')
+        ]);
+        
+        const reposData = await reposRes.json();
+        const failuresData = await failuresRes.json();
+        
+        setRepos(reposData.repos || []);
+        setRecentFailures((failuresData.failures || []).slice(0, 10));
+      } catch (err) {
+        console.error('Fetch error:', err);
+      } finally {
+        setLoading(false);
+      }
     }
+    fetchData();
+  }, []);
 
-    const data = await response.json();
-    return data.repos || [];
-  } catch (error) {
-    console.error('Failed to fetch repos:', error);
-    return [];
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
-}
-
-async function getRecentFailures() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('user_id');
-
-  if (!userId) {
-    return [];
-  }
-
-  try {
-    const baseUrl = await getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/failures`, {
-      headers: {
-        Cookie: `user_id=${userId.value}`,
-      },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return [];
-    }
-
-    const data = await response.json();
-    return (data.failures || []).slice(0, 10);
-  } catch (error) {
-    console.error('Failed to fetch failures:', error);
-    return [];
-  }
-}
-
-export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('user_id');
-
-  if (!userId) {
-    redirect('/');
-  }
-
-  const [repos, recentFailures] = await Promise.all([getRepos(), getRecentFailures()]);
 
   return (
     <>
       <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Debug Alerts */}
+        {(success || fail || empty) && (
+          <div className={`mb-8 p-4 rounded-lg border-l-4 ${fail || empty ? 'bg-yellow-50 border-yellow-500 text-yellow-800' : 'bg-green-50 border-green-500 text-green-800'}`}>
+            <p className="font-bold">Installation Result</p>
+            <ul className="text-sm mt-1 space-y-1">
+              <li>✅ Successfully processed: {success || 0}</li>
+              {fail && <li className="text-red-600 font-semibold">❌ Failed to store: {fail}</li>}
+              {lastError && <li className="text-red-700 italic">Error details: {lastError}</li>}
+              {empty && <li className="font-bold">⚠️ GitHub returned NO repositories for this installation ID.</li>}
+            </ul>
+            <p className="text-xs mt-3 opacity-75">If repositories are missing, please try re-installing or check your GitHub App selection.</p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
@@ -116,7 +104,6 @@ export default async function DashboardPage() {
                   if (failure.status === 'pending_analysis' || failure.status === 'fixing') {
                     status = 'fixing';
                   } else if (failure.status === 'failed_after_max_retries') {
-                    // Check if it's an unfixable error requiring action
                     if (failure.is_fixable === false || failure.user_notified === true) {
                       status = 'action_required';
                     } else {
@@ -173,5 +160,13 @@ export default async function DashboardPage() {
         </section>
       </main>
     </>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
