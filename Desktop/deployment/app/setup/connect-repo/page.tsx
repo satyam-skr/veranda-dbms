@@ -8,7 +8,7 @@ export default function ConnectRepoPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get user_id from cookie (client-side)
+    // Get user_id from cookie/localStorage (client-side)
     const getCookie = (name: string) => {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
@@ -16,7 +16,14 @@ export default function ConnectRepoPage() {
       return null;
     };
 
-    const id = getCookie('user_id');
+    // Prefer the non-httpOnly debug cookie (visible to JS), then fall back
+    // to any existing localStorage value as a safety net across redirects.
+    let id = getCookie('user_id_debug') || getCookie('user_id');
+
+    if (!id) {
+      id = typeof window !== 'undefined' ? localStorage.getItem('autofix_user_id') : null;
+    }
+
     if (!id) {
       router.push('/');
       return;

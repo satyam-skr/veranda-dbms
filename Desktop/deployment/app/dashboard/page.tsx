@@ -41,6 +41,26 @@ function DashboardContent() {
   };
 
   useEffect(() => {
+    // Ensure we always have a recoverable copy of the user ID on the client.
+    // The server sets an httpOnly `user_id` cookie plus a non-httpOnly `user_id_debug`.
+    // We mirror that into localStorage so flows that rely on `state` (GitHub App) keep working
+    // even when cookies are stripped on cross-site redirects.
+    try {
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+        return null;
+      };
+
+      const id = getCookie('user_id_debug') || getCookie('user_id');
+      if (id) {
+        localStorage.setItem('autofix_user_id', id);
+      }
+    } catch {
+      // Best-effort only; ignore failures in non-browser environments.
+    }
+
     fetchData();
   }, []);
 
