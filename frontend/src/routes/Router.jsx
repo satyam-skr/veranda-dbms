@@ -3,15 +3,21 @@ import Protected from '../components/Protected';
 import Login from '../pages/auth/Login';
 import Signup from '../pages/auth/Signup';
 import Home from '../pages/home/Home';
-import OlxList from '../pages/olx/OlxList';
+// import OlxList from '../pages/olx/OlxList';
 import Mess from '../pages/mess/Mess';
 import SuperAdmin from '../pages/admin/SuperAdmin';
+import TransportPage from "../pages/transport/TransportPage";
+import PollsPage from '../pages/shop/PollsPage';
+import PollDetails from '../components/polls/PollDetails';
+import Marketplace from '../pages/marketplace/Marketplace'
+import IssueForm from '../pages/issues/IssueForm';
 
 const Router = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/transport" element={<TransportPage />} />
       
       <Route
         path="/"
@@ -23,12 +29,8 @@ const Router = () => {
       />
       
       <Route
-        path="/olx"
-        element={
-          <Protected>
-            <OlxList />
-          </Protected>
-        }
+        path="/marketplace"
+        element={<Marketplace />}
       />
       
       <Route
@@ -48,7 +50,35 @@ const Router = () => {
           </Protected>
         }
       />
+      <Route
+        path="/shop/polls"
+        element={
+          <Protected>
+            <PollsPage />
+          </Protected>
+        }
+      />
+      
+      <Route
+        path="/shop/polls/:id"
+        element={
+          <Protected>
+            <PollDetails />
+          </Protected>
+        }
+      />
+
+      <Route
+          path="/issues"
+          element={
+            <Protected>
+              <IssueForm />
+            </Protected>
+          }
+        />
+
     </Routes>
+
   );
 };
 

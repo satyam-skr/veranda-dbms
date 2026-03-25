@@ -87,13 +87,13 @@ const Login = () => {
           >
             Login as Student
           </Button>
-          <Button
+          {/* <Button
             variant="outline"
             className="w-full"
             onClick={() => handleDemoLogin('messadmin@demo.com')}
           >
             Login as Mess Admin
-          </Button>
+          </Button> */}
           <Button
             variant="outline"
             className="w-full"

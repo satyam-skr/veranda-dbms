@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
-  getMyComplaints,
-  getAllComplaints,
+   
   createComplaint,
   deleteMyOpenComplaint,
   updateComplaintStatus
@@ -16,6 +15,8 @@ import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getAllComplaints } from '../../lib/api.complaints.js';
+// import { get } from 'http';
 
 const ComplaintTab = () => {
   const { currentUser, isDomainAdmin } = useAuth();
@@ -24,12 +25,20 @@ const ComplaintTab = () => {
   const [complaints, setComplaints] = useState([]);
   const [formData, setFormData] = useState({ subject: '', detail: '' });
 
-  const loadComplaints = () => {
+  const loadComplaints = async(req,res) => {
     if (isAdmin) {
-      setComplaints(getAllComplaints());
-    } else {
-      setComplaints(getMyComplaints(currentUser.id));
-    }
+      try{
+        const complaints = await getAllComplaints();
+        console.log(complaints);
+        setComplaints(complaints);
+        
+      }catch(err){
+        res.status(500).json({message:"Error in loading complaints"});
+      }
+    } 
+    // else {
+    //   setComplaints(getAllComplaints(currentUser.id));
+    // }
   };
 
   useEffect(() => {
@@ -113,14 +122,21 @@ const ComplaintTab = () => {
         
         <div className="space-y-4">
           {complaints.map((complaint) => (
-            <Card key={complaint.id}>
+            <Card key={complaint.complaint_id}>
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-foreground">{complaint.subject}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{complaint.detail}</p>
+                    <h3 className="font-semibold text-foreground">
+                      {complaint.issue_title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {complaint.description}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      {new Date(complaint.createdAt).toLocaleDateString()}
+                      {new Date(complaint.updated_at).toLocaleDateString()}
+                    </p>
+                     <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(complaint.updated_at).toLocaleTimeString()}
                     </p>
                   </div>
                   

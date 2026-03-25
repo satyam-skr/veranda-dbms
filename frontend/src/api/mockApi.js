@@ -4,7 +4,10 @@ const STORAGE_KEYS = {
   USERS: 'veranda_users',
   LISTINGS: 'veranda_listings',
   COMPLAINTS: 'veranda_complaints',
-  RATINGS: 'veranda_ratings'
+  RATINGS: 'veranda_ratings',
+  FOOD_ITEMS: 'veranda_food_items',
+  MENU_SCHEDULE: 'veranda_menu_schedule',
+  NOTICES: 'veranda_notices'
 };
 
 // Initialize demo data
@@ -12,7 +15,7 @@ const initData = () => {
   if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
     const demoUsers = [
       {
-        id: '1',
+        id: '0c5c27ff-7703-4297-a494-26fec3287928',
         fullName: 'Student Demo',
         email: 'student@demo.com',
         password: 'demo123',
@@ -28,7 +31,7 @@ const initData = () => {
         domainAdminOf: ['mess']
       },
       {
-        id: '3',
+        id: '0c5c27ff-7703-4297-a494-26fec3287928',
         fullName: 'Super Admin Demo',
         email: 'superadmin@demo.com',
         password: 'demo123',
@@ -101,6 +104,48 @@ const initData = () => {
       { meal: 'dinner', item: 'Paneer Curry', avgStars: 4.6 }
     ];
     localStorage.setItem(STORAGE_KEYS.RATINGS, JSON.stringify(demoRatings));
+  }
+
+  if (!localStorage.getItem(STORAGE_KEYS.FOOD_ITEMS)) {
+    const demoFoodItems = [
+      { id: '1', name: 'Poha', category: 'breakfast' },
+      { id: '2', name: 'Upma', category: 'breakfast' },
+      { id: '3', name: 'Dal Rice', category: 'lunch' },
+      { id: '4', name: 'Rajma Chawal', category: 'lunch' },
+      { id: '5', name: 'Roti Sabji', category: 'dinner' },
+      { id: '6', name: 'Paneer Curry', category: 'dinner' },
+      { id: '7', name: 'Samosa', category: 'snacks' },
+      { id: '8', name: 'Tea', category: 'snacks' }
+    ];
+    localStorage.setItem(STORAGE_KEYS.FOOD_ITEMS, JSON.stringify(demoFoodItems));
+  }
+
+  if (!localStorage.getItem(STORAGE_KEYS.MENU_SCHEDULE)) {
+    const demoSchedule = [
+      {
+        day: 'Monday',
+        date: new Date().toISOString().split('T')[0],
+        slots: {
+          breakfast: { time: '08:00 - 09:30', items: ['Poha', 'Tea'] },
+          lunch: { time: '12:30 - 14:00', items: ['Dal Rice', 'Roti'] },
+          snacks: { time: '16:00 - 17:00', items: ['Samosa', 'Tea'] },
+          dinner: { time: '19:30 - 21:00', items: ['Roti Sabji', 'Rice'] }
+        }
+      }
+    ];
+    localStorage.setItem(STORAGE_KEYS.MENU_SCHEDULE, JSON.stringify(demoSchedule));
+  }
+
+  if (!localStorage.getItem(STORAGE_KEYS.NOTICES)) {
+    const demoNotices = [
+      {
+        id: '1',
+        date: new Date().toISOString().split('T')[0],
+        text: 'Mess will be closed on Sunday for maintenance.',
+        createdAt: new Date().toISOString()
+      }
+    ];
+    localStorage.setItem(STORAGE_KEYS.NOTICES, JSON.stringify(demoNotices));
   }
 };
 
@@ -227,4 +272,76 @@ export const updateComplaintStatus = (id, status) => {
 export const getWeeklyRatings = () => {
   const ratings = JSON.parse(localStorage.getItem(STORAGE_KEYS.RATINGS) || '[]');
   return ratings.sort((a, b) => b.avgStars - a.avgStars);
+};
+
+// Food Items
+export const getFoodItems = () => {
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.FOOD_ITEMS) || '[]');
+};
+
+export const createFoodItem = (foodData) => {
+  const items = getFoodItems();
+  const newItem = {
+    id: Date.now().toString(),
+    ...foodData
+  };
+  items.push(newItem);
+  localStorage.setItem(STORAGE_KEYS.FOOD_ITEMS, JSON.stringify(items));
+  return newItem;
+};
+
+export const updateFoodItem = (id, foodData) => {
+  const items = getFoodItems();
+  const index = items.findIndex(item => item.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...foodData };
+    localStorage.setItem(STORAGE_KEYS.FOOD_ITEMS, JSON.stringify(items));
+  }
+};
+
+export const deleteFoodItem = (id) => {
+  const items = getFoodItems();
+  const updated = items.filter(item => item.id !== id);
+  localStorage.setItem(STORAGE_KEYS.FOOD_ITEMS, JSON.stringify(updated));
+};
+
+// Menu Schedule
+export const getMenuSchedule = () => {
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.MENU_SCHEDULE) || '[]');
+};
+
+export const updateMenuSchedule = (scheduleData) => {
+  localStorage.setItem(STORAGE_KEYS.MENU_SCHEDULE, JSON.stringify(scheduleData));
+};
+
+// Notices
+export const getNotices = () => {
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.NOTICES) || '[]');
+};
+
+export const createNotice = (noticeData) => {
+  const notices = getNotices();
+  const newNotice = {
+    id: Date.now().toString(),
+    ...noticeData,
+    createdAt: new Date().toISOString()
+  };
+  notices.push(newNotice);
+  localStorage.setItem(STORAGE_KEYS.NOTICES, JSON.stringify(notices));
+  return newNotice;
+};
+
+export const updateNotice = (id, noticeData) => {
+  const notices = getNotices();
+  const index = notices.findIndex(notice => notice.id === id);
+  if (index !== -1) {
+    notices[index] = { ...notices[index], ...noticeData };
+    localStorage.setItem(STORAGE_KEYS.NOTICES, JSON.stringify(notices));
+  }
+};
+
+export const deleteNotice = (id) => {
+  const notices = getNotices();
+  const updated = notices.filter(notice => notice.id !== id);
+  localStorage.setItem(STORAGE_KEYS.NOTICES, JSON.stringify(updated));
 };

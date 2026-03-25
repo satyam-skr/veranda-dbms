@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/monitor?key=debug_123",
-      "schedule": "0 0 * * *"
-    }
-  ]
-}

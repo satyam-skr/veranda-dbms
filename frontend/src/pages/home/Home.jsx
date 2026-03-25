@@ -6,10 +6,10 @@ import Card from '../../components/Card';
 const Home = () => {
   const tiles = [
     {
-      title: 'OLX',
+      title: 'Marketplace',
       description: 'Buy and sell items within campus',
       icon: ShoppingBag,
-      link: '/olx',
+      link: '/marketplace',
       color: 'text-primary'
     },
     {
@@ -21,23 +21,23 @@ const Home = () => {
     },
     {
       title: 'Transport',
-      description: 'Coming soon',
+      description: 'Check Transport',
       icon: Bus,
-      disabled: true,
+      link: '/transport',
       color: 'text-muted-foreground'
     },
     {
       title: 'Shop (Poll)',
-      description: 'Coming soon',
+      description: 'Poll for new shop items',
       icon: Store,
-      disabled: true,
+      link: '/shop/polls',
       color: 'text-muted-foreground'
     },
     {
       title: 'General Complaint',
       description: 'Report any issues',
       icon: MessageSquare,
-      link: '/mess',
+      link: '/issues',
       color: 'text-destructive'
     }
   ];
